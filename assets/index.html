@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Osciloscopio DSP y Analizador FFT</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #e9ecef; margin: 0; padding: 20px; }
+        .contenedor { max-width: 1000px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1, h3 { color: #2c3e50; margin-top: 0; }
+        
+        .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        
+        /* Controles de Filtro */
+        .caja-control { background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; }
+        .controles-tiempo { display: flex; align-items: center; gap: 15px; margin-top: 15px; }
+        select, input[type=range] { width: 100%; padding: 8px; margin-top: 10px; }
+        button { background: #00878F; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.pausado { background: #e74c3c; }
+        
+        /* Tabla FFT */
+        table { width: 100%; border-collapse: collapse; text-align: center; }
+        th, td { padding: 10px; border-bottom: 1px solid #dee2e6; }
+        th { background: #2c3e50; color: white; }
+        .harmonica-row { font-weight: bold; color: #e67e22; }
+    </style>
+</head>
+<body>
+    <div class="contenedor">
+        <h1>Análisis DSP y FFT</h1>
+        
+        <div class="panel-grid">
+            <!-- SECCIÓN FILTROS (CONSIGNA 4) -->
+            <div class="caja-control">
+                <h3>Control de Filtro (Tiempo Real)</h3>
+                <label>Tipo de Filtro:</label>
+                <select id="selFiltro">
+                    <option value="ninguno">Señal Original (Sin Filtro)</option>
+                    <option value="pasabajas">Pasabajas (LPF)</option>
+                    <option value="pasaaltos">Pasaaltos (HPF)</option>
+                    <option value="pasabanda">Pasabanda (BPF)</option>
+                </select>
+                
+                <label style="display:block; margin-top:15px;">Frecuencia de Corte: <span id="lblFc">5.0</span> Hz</label>
+                <input type="range" id="sliderFc" min="0.5" max="30" step="0.5" value="5.0">
+            </div>
+
+            <!-- SECCIÓN FFT (CONSIGNA 3) -->
+            <div class="caja-control">
+                <h3>Espectro FFT (Top 3 Armónicas)</h3>
+                <table>
+                    <thead>
+                        <tr><th>#</th><th>Frecuencia (Hz)</th><th>Amplitud (Vp)</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr class="harmonica-row"><td>1 (Fundamental)</td><td id="h1-f">0.0</td><td id="h1-a">0.00</td></tr>
+                        <tr class="harmonica-row"><td>2</td><td id="h2-f">0.0</td><td id="h2-a">0.00</td></tr>
+                        <tr class="harmonica-row"><td>3</td><td id="h3-f">0.0</td><td id="h3-a">0.00</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- GRÁFICA Y CONTROLES DE TIEMPO -->
+        <h3 id="etiqueta-tiempo" style="text-align: right; color: #7f8c8d; font-size: 0.9em;">En vivo...</h3>
+        <canvas id="graficoSenal" width="900" height="300"></canvas>
+        
+        <div class="controles-tiempo">
+            <button id="btnPausa">Pausar</button>
+            <input type="range" id="sliderHistoria" min="0" max="0" value="0" disabled title="Viajar en el tiempo">
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        
+        // --- LOGICA DEL FILTRO HACIA PYTHON ---
+        const selFiltro = document.getElementById('selFiltro');
+        const sliderFc = document.getElementById('sliderFc');
+        
+        function actualizarFiltro() {
+            document.getElementById('lblFc').innerText = sliderFc.value;
+            socket.emit('actualizar_filtro', {
+                tipo: selFiltro.value,
+                fc: sliderFc.value
+            });
+        }
+        selFiltro.addEventListener('change', actualizarFiltro);
+        sliderFc.addEventListener('input', actualizarFiltro);
+
+        // --- SISTEMA DE MEMORIA (PAUSA Y RETROCESO) ---
+        const MAX_HISTORIAL = 1000; // 10 segundos a 100Hz
+        let historial = [];
+        let estaPausado = false;
+        const PUNTOS_VISIBLES = 100; // Vemos 1 segundo en pantalla (100 muestras)
+
+        // --- GRÁFICO CHART.JS ---
+        const ctx = document.getElementById('graficoSenal').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: Array(PUNTOS_VISIBLES).fill(''),
+                datasets: [
+                    { label: 'Salida (Filtrada)', data: Array(PUNTOS_VISIBLES).fill(0), borderColor: '#00878F', borderWidth: 2, tension: 0.2, pointRadius: 0 },
+                    { label: 'Entrada (Cruda)', data: Array(PUNTOS_VISIBLES).fill(0), borderColor: '#bdc3c7', borderWidth: 1, borderDash: [5,5], tension: 0.2, pointRadius: 0 }
+                ]
+            },
+            options: { animation: false, scales: { y: { min: -7, max: 7, grid: { color: '#ecf0f1' } }, x: { ticks: { display: false } } } }
+        });
+
+        // --- RECEPCIÓN DE DATOS ---
+        socket.on('datos_dsp', function(datos) {
+            // 1. Actualizar memoria
+            historial.push(datos);
+            if (historial.length > MAX_HISTORIAL) historial.shift();
+
+            // 2. Dibujar si no está pausado
+            if (!estaPausado) {
+                dibujarPantalla(historial.length - 1);
+                document.getElementById('sliderHistoria').max = historial.length - 1;
+                document.getElementById('sliderHistoria').value = historial.length - 1;
+            }
+
+            // 3. Actualizar tabla FFT si llegan datos (Consigna 3)
+            if (datos.fft && !estaPausado) {
+                for (let i = 0; i < 3; i++) {
+                    document.getElementById(`h${i+1}-f`).innerText = datos.fft[i].frec.toFixed(1);
+                    document.getElementById(`h${i+1}-a`).innerText = datos.fft[i].amp.toFixed(2);
+                }
+            }
+        });
+
+        function dibujarPantalla(indiceFinal) {
+            if (historial.length === 0) return;
+            let inicio = Math.max(0, indiceFinal - PUNTOS_VISIBLES + 1);
+            let ventana = historial.slice(inicio, indiceFinal + 1);
+
+            chart.data.labels = ventana.map(d => d.tiempo);
+            chart.data.datasets[0].data = ventana.map(d => d.v_out);
+            chart.data.datasets[1].data = ventana.map(d => d.v_in);
+            chart.update();
+
+            document.getElementById('etiqueta-tiempo').innerText = 
+                estaPausado ? `Pausado - Mostrando dato de: ${ventana[ventana.length-1].tiempo}` : "Transmisión en Vivo...";
+        }
+
+        // --- CONTROLES DE TIEMPO ---
+        const btnPausa = document.getElementById('btnPausa');
+        const sliderHistoria = document.getElementById('sliderHistoria');
+
+        btnPausa.addEventListener('click', () => {
+            estaPausado = !estaPausado;
+            btnPausa.innerText = estaPausado ? "Reanudar" : "Pausar";
+            btnPausa.classList.toggle("pausado", estaPausado);
+            sliderHistoria.disabled = !estaPausado;
+            if (!estaPausado) dibujarPantalla(historial.length - 1);
+        });
+
+        sliderHistoria.addEventListener('input', function() {
+            if (!estaPausado) btnPausa.click(); // Auto-pausar si arrastra
+            dibujarPantalla(parseInt(this.value));
+        });
+    </script>
+</body>
+</html>
