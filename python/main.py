@@ -48,9 +48,28 @@ y_bp_lp_prev = 0.0
 y_bp_hp_prev = 0.0
 
 def recibir_configuracion(sid, data):
+    """ Escucha los cambios que el usuario hace en la página web """
     global config_filtro
-    config_filtro['tipo'] = data.get('tipo', 'ninguno')
+    
+    tipo_filtro = data.get('tipo', 'ninguno')
+    config_filtro['tipo'] = tipo_filtro
     config_filtro['fc'] = float(data.get('fc', 5.0))
+
+    # Diccionario para traducir el texto a un número para el Arduino
+    mapa_filtros = {
+        'ninguno': 0,
+        'pasabajas': 1,
+        'pasaaltos': 2,
+        'pasabanda': 3
+    }
+    
+    id_filtro = mapa_filtros.get(tipo_filtro, 0)
+    
+    # Le pedimos al Arduino que dibuje el icono correspondiente
+    try:
+        rpc.call('dibujarFiltro', id_filtro)
+    except Exception as e:
+        print(f"Error al enviar dibujo a la matriz: {e}")
 
 web_ui.on_message('actualizar_filtro', recibir_configuracion)
 
@@ -130,8 +149,7 @@ def bucle_control_senal():
             voltaje_arduino_out = (voltaje_real_out / 3.6363) + 1.65
             
             # Convertimos de 0-3.3V a cuentas del DAC (0-4095)
-            # Usamos max() y min() para "clampear" el valor. Los filtros (especialmente el pasaaltos) 
-            # pueden generar pequeños picos que superen el límite, lo que causaría errores en el Arduino.
+            # Usamos max() y min() para "clampear" el valor para evitar desbordamientos
             valor_dac = int(max(0, min(4095, (voltaje_arduino_out / 3.3) * 4095.0)))
             
             # Enviamos el dato crudo al microcontrolador
