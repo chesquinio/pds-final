@@ -55,22 +55,6 @@ def recibir_configuracion(sid, data):
     config_filtro['tipo'] = tipo_filtro
     config_filtro['fc'] = float(data.get('fc', 5.0))
 
-    # Diccionario para traducir el texto a un número para el Arduino
-    mapa_filtros = {
-        'ninguno': 0,
-        'pasabajas': 1,
-        'pasaaltos': 2,
-        'pasabanda': 3
-    }
-    
-    id_filtro = mapa_filtros.get(tipo_filtro, 0)
-    
-    # Le pedimos al Arduino que dibuje el icono correspondiente
-    try:
-        rpc.call('dibujarFiltro', id_filtro)
-    except Exception as e:
-        print(f"Error al enviar dibujo a la matriz: {e}")
-
 web_ui.on_message('actualizar_filtro', recibir_configuracion)
 
 def procesar_fft(datos):
