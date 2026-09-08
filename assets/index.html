@@ -83,11 +83,14 @@
             document.getElementById('lblFc').innerText = sliderFc.value;
             socket.emit('actualizar_filtro', {
                 tipo: selFiltro.value,
-                fc: sliderFc.value
+                fc: parseFloat(sliderFc.value)
             });
         }
         selFiltro.addEventListener('change', actualizarFiltro);
-        sliderFc.addEventListener('input', actualizarFiltro);
+        sliderFc.addEventListener('input', function() {
+            document.getElementById('lblFc').innerText = this.value;
+        });
+        sliderFc.addEventListener('change', actualizarFiltro);
 
         // --- SISTEMA DE MEMORIA (PAUSA Y RETROCESO) ---
         const MAX_HISTORIAL = 2000; // 10 segundos a 200Hz

@@ -1,3 +1,4 @@
+import threading
 import time
 import socket
 import msgpack
@@ -11,20 +12,29 @@ class BridgeSocketClient:
     def __init__(self, socket_path):
         self.socket_path = socket_path
         self.msgid = 0
+        self._lock = threading.Lock()
+
     def call(self, method, *args):
-        self.msgid += 1
-        req = [0, self.msgid, method, list(args)]
-        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
-            sock.connect(self.socket_path)
-            sock.sendall(msgpack.packb(req, use_bin_type=True))
-            unpacker = msgpack.Unpacker(raw=False)
-            while True:
-                data = sock.recv(4096)
-                if not data: raise ConnectionError("Cerrado")
-                unpacker.feed(data)
-                for msg in unpacker:
-                    if len(msg) == 4 and msg[0] == 1 and msg[1] == self.msgid:
-                        return msg[3]
+        with self._lock:
+            self.msgid = (self.msgid + 1) & 0xFFFFFFFF
+            current_id = self.msgid
+            req = [0, current_id, method, list(args)]
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as sock:
+                    sock.settimeout(0.5) # Timeout de 500ms para evitar bloqueos
+                    sock.connect(self.socket_path)
+                    sock.sendall(msgpack.packb(req, use_bin_type=True))
+                    unpacker = msgpack.Unpacker(raw=False)
+                    while True:
+                        data = sock.recv(4096)
+                        if not data:
+                            break
+                        unpacker.feed(data)
+                        for msg in unpacker:
+                            if len(msg) == 4 and msg[0] == 1 and msg[1] == current_id:
+                                return msg[3]
+            except Exception as e:
+                print(f"Error en RPC call '{method}': {e}")
         return None
 
 rpc = BridgeSocketClient("/var/run/arduino-router.sock")
@@ -39,10 +49,11 @@ buffer_fft = deque(maxlen=TAMANO_FFT)
 
 # --- ESTADO DE LOS FILTROS DIGITALES ---
 config_filtro = {'tipo': 'ninguno', 'fc': 5.0}
+nueva_configuracion = None  # Variable para sincronizar cambios sin bloquear hilos
 
 def recibir_configuracion(sid, data):
-    """ Escucha los cambios que el usuario hace en la página web y los envía al MCU """
-    global config_filtro
+    """ Escucha los cambios de la UI y los encola para el bucle principal de forma no bloqueante """
+    global config_filtro, nueva_configuracion
     
     tipo_filtro = data.get('tipo', 'ninguno')
     fc = float(data.get('fc', 5.0))
@@ -57,10 +68,8 @@ def recibir_configuracion(sid, data):
     }
     id_filtro = mapa_filtros.get(tipo_filtro, 0)
     
-    try:
-        rpc.call('configurarFiltro', id_filtro, fc)
-    except Exception as e:
-        print(f"Error al enviar configurarFiltro al Arduino: {e}")
+    # Se guarda para que el bucle principal lo envíe secuencialmente
+    nueva_configuracion = {'tipo': id_filtro, 'fc': fc}
 
 web_ui.on_message('actualizar_filtro', recibir_configuracion)
 
@@ -156,10 +165,19 @@ def procesar_fft(datos):
 contador_fft = 0
 
 def bucle_control_senal():
-    global contador_fft
+    global contador_fft, nueva_configuracion
     
     try:
-        # Leemos el lote de muestras recopiladas por el microcontrolador a 200 Hz
+        # 1. Si hay una nueva configuración de filtro pendiente desde la UI, se envía al MCU
+        if nueva_configuracion is not None:
+            cfg = nueva_configuracion
+            nueva_configuracion = None
+            try:
+                rpc.call('configurarFiltro', cfg['tipo'], float(cfg['fc']))
+            except Exception as e:
+                print(f"Error al enviar configurarFiltro al Arduino: {e}")
+
+        # 2. Leemos el lote de muestras recopiladas por el microcontrolador a 200 Hz
         datos_mcu = rpc.call('leerTelemetria')
         
         if datos_mcu and len(datos_mcu) >= 2:

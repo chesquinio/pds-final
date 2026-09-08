@@ -111,9 +111,9 @@ std::vector<float> leerTelemetria() {
 }
 
 // RPC: Configurar filtro desde la Web / Python
-int configurarFiltro(int tipo, float fc) {
+int configurarFiltro(int tipo, double fc) {
   tipo_filtro = tipo;
-  fc_filtro = fc;
+  fc_filtro = (float)fc;
   recalcularCoeficientes();
   return 1;
 }
