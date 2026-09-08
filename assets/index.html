@@ -90,10 +90,10 @@
         sliderFc.addEventListener('input', actualizarFiltro);
 
         // --- SISTEMA DE MEMORIA (PAUSA Y RETROCESO) ---
-        const MAX_HISTORIAL = 1000; // 10 segundos a 100Hz
+        const MAX_HISTORIAL = 2000; // 10 segundos a 200Hz
         let historial = [];
         let estaPausado = false;
-        const PUNTOS_VISIBLES = 100; // Vemos 1 segundo en pantalla (100 muestras)
+        const PUNTOS_VISIBLES = 200; // Vemos 1 segundo en pantalla (200 muestras)
 
         // --- GRÁFICO CHART.JS ---
         const ctx = document.getElementById('graficoSenal').getContext('2d');
@@ -111,23 +111,28 @@
 
         // --- RECEPCIÓN DE DATOS ---
         socket.on('datos_dsp', function(datos) {
-            // 1. Actualizar memoria
-            historial.push(datos);
-            if (historial.length > MAX_HISTORIAL) historial.shift();
+            // Soportar recepción por lote (batch) o punto individual
+            let puntos = datos.muestras ? datos.muestras : (Array.isArray(datos) ? datos : [datos]);
+            for (let i = 0; i < puntos.length; i++) {
+                historial.push(puntos[i]);
+                if (historial.length > MAX_HISTORIAL) historial.shift();
+            }
 
-            // 2. Dibujar si no está pausado
-            if (!estaPausado) {
+            // Actualizar tabla FFT si llegan datos de armónicas
+            if (datos.fft && !estaPausado) {
+                for (let i = 0; i < 3; i++) {
+                    if (datos.fft[i]) {
+                        document.getElementById(`h${i+1}-f`).innerText = datos.fft[i].frec.toFixed(1);
+                        document.getElementById(`h${i+1}-a`).innerText = datos.fft[i].amp.toFixed(2);
+                    }
+                }
+            }
+
+            // Dibujar una sola vez por cuadro
+            if (!estaPausado && historial.length > 0) {
                 dibujarPantalla(historial.length - 1);
                 document.getElementById('sliderHistoria').max = historial.length - 1;
                 document.getElementById('sliderHistoria').value = historial.length - 1;
-            }
-
-            // 3. Actualizar tabla FFT si llegan datos (Consigna 3)
-            if (datos.fft && !estaPausado) {
-                for (let i = 0; i < 3; i++) {
-                    document.getElementById(`h${i+1}-f`).innerText = datos.fft[i].frec.toFixed(1);
-                    document.getElementById(`h${i+1}-a`).innerText = datos.fft[i].amp.toFixed(2);
-                }
             }
         });
 
