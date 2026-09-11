@@ -527,7 +527,7 @@
                         data: Array(100).fill(0),
                         borderColor: '#00e5ff',
                         borderWidth: 2,
-                        tension: 0.25,
+                        tension: 0,
                         pointRadius: 0
                     },
                     {
@@ -535,7 +535,7 @@
                         data: Array(100).fill(0),
                         borderColor: '#ff9100',
                         borderWidth: 2,
-                        tension: 0.25,
+                        tension: 0,
                         pointRadius: 0
                     }
                 ]
@@ -631,19 +631,61 @@
             }
         });
 
+        function buscarDisparo(buffer, cantidadMuestras) {
+            if (buffer.length < cantidadMuestras + 10) return -1;
+            
+            // Nivel medio en las últimas muestras para disparar en el centro de la oscilación
+            let nTest = Math.min(200, buffer.length);
+            let sub = buffer.slice(buffer.length - nTest);
+            let vMin = Infinity, vMax = -Infinity;
+            for (let i = 0; i < sub.length; i++) {
+                if (sub[i].v_in < vMin) vMin = sub[i].v_in;
+                if (sub[i].v_in > vMax) vMax = sub[i].v_in;
+            }
+            if (vMax - vMin < 0.15) return -1; // Ruido o continua, no disparar
+            let umbral = (vMax + vMin) / 2.0;
+
+            // Buscar hacia atrás el último cruce ascendente que permita mostrar la ventana completa
+            let finBusqueda = buffer.length - cantidadMuestras;
+            let inicioBusqueda = Math.max(1, finBusqueda - 250);
+
+            for (let i = finBusqueda; i >= inicioBusqueda; i--) {
+                if (buffer[i - 1].v_in <= umbral && buffer[i].v_in > umbral) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
         function dibujarOsciloscopio(idxFinal) {
             if (bufferHistorial.length === 0) return;
             let cantidadMuestras = Math.min(baseTiempoMs, bufferHistorial.length);
-            let idxInicio = Math.max(0, idxFinal - cantidadMuestras + 1);
-            let ventana = bufferHistorial.slice(idxInicio, idxFinal + 1);
+            
+            let idxInicio;
+            if (!estaPausado) {
+                let idxTrig = buscarDisparo(bufferHistorial, cantidadMuestras);
+                if (idxTrig !== -1) {
+                    idxInicio = idxTrig;
+                } else {
+                    idxInicio = Math.max(0, bufferHistorial.length - cantidadMuestras);
+                }
+            } else {
+                idxInicio = Math.max(0, idxFinal - cantidadMuestras + 1);
+            }
 
-            chartOsc.data.labels = ventana.map(d => d.tiempo);
+            let ventana = bufferHistorial.slice(idxInicio, idxInicio + cantidadMuestras);
+            if (ventana.length === 0) return;
+
+            chartOsc.data.labels = ventana.map((_, i) => i + ' ms');
             chartOsc.data.datasets[0].data = ventana.map(d => d.v_in);
             chartOsc.data.datasets[1].data = ventana.map(d => d.v_out);
             chartOsc.update();
 
-            let vins = ventana.map(d => d.v_in);
-            let vouts = ventana.map(d => d.v_out);
+            // Medición estable de Vpp y Ganancia sobre una ventana amplia (últimas 500-1000 muestras)
+            let nMed = Math.min(1000, bufferHistorial.length);
+            let bloqueMedicion = bufferHistorial.slice(bufferHistorial.length - nMed);
+            let vins = bloqueMedicion.map(d => d.v_in);
+            let vouts = bloqueMedicion.map(d => d.v_out);
             let maxIn = Math.max(...vins), minIn = Math.min(...vins);
             let maxOut = Math.max(...vouts), minOut = Math.min(...vouts);
             let vppIn = maxIn - minIn;

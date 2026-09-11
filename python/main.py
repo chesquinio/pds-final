@@ -165,42 +165,57 @@ def procesar_fft(datos):
     }]
     
     # Deteccion de 2 y 3 armonica
+    k_teorico_prev = k1
     for mult in [2, 3]:
         f_teorica = mult * f1
         k_teorico = int(round(f_teorica / df))
         
         # Debe encontrarse por debajo del limite de Nyquist (FS/2 = 500 Hz)
         if k_teorico + 2 < len(magnitudes):
-            k_ini = max(1, k_teorico - 3)
-            k_fin = min(len(magnitudes) - 2, k_teorico + 4)
-            k_h = k_ini + int(np.argmax(magnitudes[k_ini:k_fin]))
+            # Proteger contra invasion del lobulo principal de la fundamental o armonica previa
+            k_ini = max(k_teorico_prev + 3, k_teorico - 2)
+            k_fin = min(len(magnitudes) - 2, k_teorico + 3)
+            k_teorico_prev = k_teorico
             
-            umbral_armonica = max(0.04, 0.015 * a1)
-            if (magnitudes[k_h] > magnitudes[k_h - 1] and 
-                magnitudes[k_h] > magnitudes[k_h + 1] and 
-                magnitudes[k_h] >= umbral_armonica):
+            if k_fin >= k_ini:
+                k_h = k_ini + int(np.argmax(magnitudes[k_ini:k_fin + 1]))
                 
-                yh1, yh2, yh3 = float(magnitudes[k_h - 1]), float(magnitudes[k_h]), float(magnitudes[k_h + 1])
-                denom_h = yh1 - 2.0 * yh2 + yh3
-                delta_h = 0.5 * (yh1 - yh3) / denom_h if abs(denom_h) > 1e-9 else 0.0
-                fh = (k_h + delta_h) * df
-                
-                val_sinc_h = sinc(delta_h) / (1.0 - delta_h**2) if abs(delta_h) < 0.999 else 1.0
-                corr_h = 1.0 / abs(val_sinc_h) if abs(val_sinc_h) > 1e-4 else 1.0
-                ah = yh2 * corr_h
-                
-                resultado.append({
-                    'armonica': mult,
-                    'nombre': f'{mult}� Arm�nica',
-                    'frec': round(float(fh), 1),
-                    'amp': round(float(ah), 2),
-                    'vpp': round(float(ah * 2.0), 2),
-                    'pct': round(float((ah / a1) * 100.0), 1)
-                })
+                # Umbral de armonica: por encima de lobulos laterales de Hanning (-31.5 dB = ~2.7%)
+                umbral_armonica = max(0.06, 0.035 * a1)
+                if (magnitudes[k_h] > magnitudes[k_h - 1] and 
+                    magnitudes[k_h] > magnitudes[k_h + 1] and 
+                    magnitudes[k_h] >= umbral_armonica):
+                    
+                    yh1, yh2, yh3 = float(magnitudes[k_h - 1]), float(magnitudes[k_h]), float(magnitudes[k_h + 1])
+                    denom_h = yh1 - 2.0 * yh2 + yh3
+                    delta_h = 0.5 * (yh1 - yh3) / denom_h if abs(denom_h) > 1e-9 else 0.0
+                    fh = (k_h + delta_h) * df
+                    
+                    val_sinc_h = sinc(delta_h) / (1.0 - delta_h**2) if abs(delta_h) < 0.999 else 1.0
+                    corr_h = 1.0 / abs(val_sinc_h) if abs(val_sinc_h) > 1e-4 else 1.0
+                    ah = yh2 * corr_h
+                    
+                    resultado.append({
+                        'armonica': mult,
+                        'nombre': f'{mult}ª Armónica',
+                        'frec': round(float(fh), 1),
+                        'amp': round(float(ah), 2),
+                        'vpp': round(float(ah * 2.0), 2),
+                        'pct': round(float((ah / a1) * 100.0), 1)
+                    })
+                else:
+                    resultado.append({
+                        'armonica': mult,
+                        'nombre': f'{mult}ª Armónica',
+                        'frec': round(float(f_teorica), 1),
+                        'amp': 0.0,
+                        'vpp': 0.0,
+                        'pct': 0.0
+                    })
             else:
                 resultado.append({
                     'armonica': mult,
-                    'nombre': f'{mult}� Arm�nica',
+                    'nombre': f'{mult}ª Armónica',
                     'frec': round(float(f_teorica), 1),
                     'amp': 0.0,
                     'vpp': 0.0,
@@ -209,7 +224,7 @@ def procesar_fft(datos):
         else:
             resultado.append({
                 'armonica': mult,
-                'nombre': f'{mult}� Arm�nica',
+                'nombre': f'{mult}ª Armónica',
                 'frec': round(float(f_teorica), 1),
                 'amp': 0.0,
                 'vpp': 0.0,
@@ -220,9 +235,9 @@ def procesar_fft(datos):
     a3 = resultado[2]['amp']
     thd = (np.sqrt(a2**2 + a3**2) / a1) * 100.0 if a1 > 0.05 else 0.0
     
-    # Mini-espectro para graficar en pantalla (hasta 350 Hz en 60 puntos)
-    max_k_esp = min(len(magnitudes), int(350.0 / df))
-    paso_esp = max(1, max_k_esp // 60)
+    # Mini-espectro para graficar en pantalla (hasta 300 Hz en 100 puntos nítidos)
+    max_k_esp = min(len(magnitudes), int(300.0 / df))
+    paso_esp = max(1, max_k_esp // 100)
     mini_espectro = []
     for bi in range(0, max_k_esp, paso_esp):
         mini_espectro.append({
@@ -264,8 +279,15 @@ def bucle_control_senal():
                 print(f"Error al enviar controlMuestreo: {e}")
 
         # 3. Leer lote de muestras recopiladas en el MCU a 1000 Hz
-        # El MCU devuelve valores int16 en milivoltios: [vin_mv_0, vout_mv_0, ...]
-        datos_mcu = rpc.call('leerTelemetria')
+        # Drenado completo del ring buffer para garantizar cero perdida de muestras
+        datos_mcu = []
+        for _ in range(16):
+            lote = rpc.call('leerTelemetria')
+            if not lote:
+                break
+            datos_mcu.extend(lote)
+            if len(lote) < 96 * 2: # Se vació el buffer del MCU
+                break
         
         if datos_mcu and len(datos_mcu) >= 2:
             muestras_batch = []

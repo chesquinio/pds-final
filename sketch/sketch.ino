@@ -117,15 +117,18 @@ volatile uint32_t ring_tail = 0; // Escrito por Sampler Thread
 
 inline void ring_push(int16_t vin_mv, int16_t vout_mv) {
   uint32_t next_tail = (ring_tail + 1) & (RING_BUFFER_SIZE - 1);
-  if (next_tail != ring_head) {
-    ring_vin[ring_tail] = vin_mv;
-    ring_vout[ring_tail] = vout_mv;
-    ring_tail = next_tail;
+  if (next_tail == ring_head) {
+    // Si el buffer se llena por algún retraso en la lectura, avanzar ring_head
+    // para conservar siempre las muestras más recientes y evitar congelamientos.
+    ring_head = (ring_head + 1) & (RING_BUFFER_SIZE - 1);
   }
+  ring_vin[ring_tail] = vin_mv;
+  ring_vout[ring_tail] = vout_mv;
+  ring_tail = next_tail;
 }
 
-// Retorna hasta 64 muestras (128 int16 = 256 bytes, seguro dentro de 1024 DECODER_BUFFER_SIZE)
-const int MAX_RPC_SAMPLES = 64;
+// Retorna hasta 96 muestras (192 int16 = ~400-600 bytes en Msgpack, seguro dentro de 1024 DECODER_BUFFER_SIZE)
+const int MAX_RPC_SAMPLES = 96;
 
 std::vector<int16_t> leerTelemetria() {
   std::vector<int16_t> datos;
