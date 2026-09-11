@@ -55,21 +55,19 @@ class BridgeSocketClient:
                             if len(msg) == 4 and msg[0] == 1 and msg[1] == current_id:
                                 return msg[3]
                 except Exception as e:
-                    # En caso de error o desconexión, cerramos y reintentamos una vez
                     self._conectar()
             return None
 
 rpc = BridgeSocketClient("/var/run/arduino-router.sock")
 web_ui = WebUI()
 
-# --- PARÁMETROS DSP Y DE MUESTREO NATIVO A 1000 HZ ---
+# --- PARï¿½METROS DSP Y DE MUESTREO NATIVO A 1000 HZ ---
 FS = 1000.0  # Frecuencia de muestreo del hardware (Hz)
 DT = 1.0 / FS
-TAMANO_FFT = 1024  # 1.024 segundos de señal -> Delta_f = 0.976 Hz
+TAMANO_FFT = 1024
 
 buffer_fft = deque(maxlen=TAMANO_FFT)
 
-# Estado y sincronización de controles
 config_filtro = {'tipo': 'ninguno', 'fc': 20.0}
 nueva_configuracion = None
 comando_muestreo = None
@@ -87,7 +85,6 @@ def recibir_configuracion(sid, data):
     nueva_configuracion = {'tipo': mapa_filtros.get(tipo_filtro, 0), 'fc': fc}
 
 def recibir_control_muestreo(sid, data):
-    """ Permite iniciar o detener el muestreo de adquisición (Consigna 2) """
     global comando_muestreo, muestreo_activo
     activo = bool(data.get('activo', True))
     muestreo_activo = activo
@@ -103,8 +100,8 @@ def sinc(x):
 
 def procesar_fft(datos):
     """
-    Calcula la FFT con ventana de Hanning, interpolación parabólica y detección
-    de las 3 primeras armónicas (fundamental, 2ª y 3ª) en el rango completo (hasta 120 Hz).
+    Calcula la FFT con ventana de Hanning, interpolacion parabolica y deteccion
+    de las 3 primeras armï¿½nicas (fundamental, 2 y 3) en el rango completo (hasta 120 Hz).
     """
     if len(datos) < TAMANO_FFT:
         return None
@@ -122,7 +119,7 @@ def procesar_fft(datos):
     magnitudes = np.abs(espectro) * (2.0 / ganancia_coherente)
     df = FS / TAMANO_FFT
     
-    # Búsqueda de Fundamental entre 1.0 Hz y 125.0 Hz
+    # Busqueda de Fundamental entre 1.0 Hz y 125.0 Hz
     idx_min = max(1, int(1.0 / df))
     idx_max = min(len(magnitudes) - 2, int(125.0 / df))
     
@@ -132,13 +129,13 @@ def procesar_fft(datos):
     k1 = idx_min + int(np.argmax(magnitudes[idx_min:idx_max]))
     amp1_raw = float(magnitudes[k1])
     
-    # Umbral de detección mínima (40 mV)
+    # Umbral de deteccion minima (40 mV)
     if amp1_raw < 0.04:
         return {
             'armonicas': [
                 {'armonica': 1, 'nombre': 'Fundamental', 'frec': 0.0, 'amp': 0.0, 'vpp': 0.0, 'pct': 100.0},
-                {'armonica': 2, 'nombre': '2ª Armónica', 'frec': 0.0, 'amp': 0.0, 'vpp': 0.0, 'pct': 0.0},
-                {'armonica': 3, 'nombre': '3ª Armónica', 'frec': 0.0, 'amp': 0.0, 'vpp': 0.0, 'pct': 0.0}
+                {'armonica': 2, 'nombre': '2ï¿½ Armï¿½nica', 'frec': 0.0, 'amp': 0.0, 'vpp': 0.0, 'pct': 0.0},
+                {'armonica': 3, 'nombre': '3ï¿½ Armï¿½nica', 'frec': 0.0, 'amp': 0.0, 'vpp': 0.0, 'pct': 0.0}
             ],
             'thd': 0.0,
             'v_dc': round(media_dc, 2),
@@ -147,13 +144,13 @@ def procesar_fft(datos):
             'espectro': []
         }
         
-    # Interpolación cuadrática para afinar frecuencia del pico
+    # Interpolacion cuadratica para afinar frecuencia del pico
     y1, y2, y3 = float(magnitudes[k1 - 1]), float(magnitudes[k1]), float(magnitudes[k1 + 1])
     denom = y1 - 2.0 * y2 + y3
     delta = 0.5 * (y1 - y3) / denom if abs(denom) > 1e-9 else 0.0
     f1 = (k1 + delta) * df
     
-    # Corrección de festoneado de Hanning
+    # Correccion de festoneado de Hanning
     val_sinc = sinc(delta) / (1.0 - delta**2) if abs(delta) < 0.999 else 1.0
     corr_amp = 1.0 / abs(val_sinc) if abs(val_sinc) > 1e-4 else 1.0
     a1 = y2 * corr_amp
@@ -167,12 +164,12 @@ def procesar_fft(datos):
         'pct': 100.0
     }]
     
-    # Detección de 2ª y 3ª armónica
+    # Deteccion de 2 y 3 armonica
     for mult in [2, 3]:
         f_teorica = mult * f1
         k_teorico = int(round(f_teorica / df))
         
-        # Debe encontrarse por debajo del límite de Nyquist (FS/2 = 500 Hz)
+        # Debe encontrarse por debajo del limite de Nyquist (FS/2 = 500 Hz)
         if k_teorico + 2 < len(magnitudes):
             k_ini = max(1, k_teorico - 3)
             k_fin = min(len(magnitudes) - 2, k_teorico + 4)
@@ -194,7 +191,7 @@ def procesar_fft(datos):
                 
                 resultado.append({
                     'armonica': mult,
-                    'nombre': f'{mult}ª Armónica',
+                    'nombre': f'{mult}ï¿½ Armï¿½nica',
                     'frec': round(float(fh), 1),
                     'amp': round(float(ah), 2),
                     'vpp': round(float(ah * 2.0), 2),
@@ -203,7 +200,7 @@ def procesar_fft(datos):
             else:
                 resultado.append({
                     'armonica': mult,
-                    'nombre': f'{mult}ª Armónica',
+                    'nombre': f'{mult}ï¿½ Armï¿½nica',
                     'frec': round(float(f_teorica), 1),
                     'amp': 0.0,
                     'vpp': 0.0,
@@ -212,7 +209,7 @@ def procesar_fft(datos):
         else:
             resultado.append({
                 'armonica': mult,
-                'nombre': f'{mult}ª Armónica',
+                'nombre': f'{mult}ï¿½ Armï¿½nica',
                 'frec': round(float(f_teorica), 1),
                 'amp': 0.0,
                 'vpp': 0.0,
@@ -285,7 +282,7 @@ def bucle_control_senal():
                     'tiempo': tiempo_base.strftime('%H:%M:%S.%f')[:-3]
                 })
             
-            # Cálculo de la FFT aproximadamente cada 200 ms (5 ciclos a ~25 FPS)
+            # Calculo de la FFT aproximadamente cada 200 ms (5 ciclos a ~25 FPS)
             contador_fft += 1
             info_fft = None
             if contador_fft >= 5:

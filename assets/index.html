@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Osciloscopio DSP y Analizador de Espectro FFT - PDS</title>
+    <title>Osciloscopio Digital y Analizador de Espectro FFT</title>
     <script src="libs/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -19,6 +19,7 @@
             --text-principal: #f0f4f8;
             --text-secundario: #90a4ae;
         }
+
         * { box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -27,7 +28,13 @@
             margin: 0;
             padding: 16px;
         }
-        .contenedor { max-width: 1400px; margin: 0 auto; }
+
+        .contenedor {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* ENCABEZADO */
         header {
             display: flex;
             justify-content: space-between;
@@ -38,20 +45,35 @@
             border: 1px solid var(--border-color);
             margin-bottom: 16px;
         }
-        h1 { margin: 0; font-size: 1.3rem; color: #fff; display: flex; align-items: center; gap: 10px; }
+        h1 {
+            margin: 0;
+            font-size: 1.35rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
         .badge-fs {
-            background: rgba(0, 229, 255, 0.15);
+            background: rgba(0, 229, 255, 0.12);
             color: var(--accent-cyan);
             border: 1px solid var(--accent-cyan);
             font-size: 0.75rem;
-            padding: 3px 8px;
+            padding: 3px 10px;
             border-radius: 4px;
             font-weight: 600;
+            letter-spacing: 0.5px;
         }
-        .barra-superior-controles { display: flex; align-items: center; gap: 12px; }
+
+        .barra-superior-controles {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        /* BOTONES */
         button {
             border: none;
-            padding: 8px 16px;
+            padding: 9px 18px;
             border-radius: 6px;
             font-weight: 600;
             cursor: pointer;
@@ -59,18 +81,26 @@
             align-items: center;
             gap: 6px;
             font-size: 0.85rem;
+            transition: all 0.2s ease;
         }
         .btn-iniciar { background: var(--accent-green); color: #000; }
         .btn-detener { background: var(--accent-red); color: #fff; }
         .btn-pausa { background: #37474f; color: #fff; border: 1px solid #546e7a; }
         .btn-pausa.pausado { background: #d32f2f; border-color: #f44336; }
-        button:hover { filter: brightness(1.15); }
+        button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+        /* GRID PRINCIPAL */
         .layout-principal {
             display: grid;
-            grid-template-columns: 1fr 400px;
+            grid-template-columns: 1fr 410px;
             gap: 16px;
         }
-        @media (max-width: 1050px) { .layout-principal { grid-template-columns: 1fr; } }
+
+        @media (max-width: 1050px) {
+            .layout-principal { grid-template-columns: 1fr; }
+        }
+
+        /* TARJETAS */
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
@@ -89,6 +119,8 @@
             border-bottom: 1px solid var(--border-color);
             padding-bottom: 8px;
         }
+
+        /* OSCILOSCOPIO DISPLAY */
         .contenedor-osciloscopio {
             position: relative;
             background: #080c11;
@@ -96,7 +128,12 @@
             border: 2px solid #1e293b;
             padding: 8px;
         }
-        .canvas-osc { width: 100% !important; height: 380px !important; }
+        .canvas-osc {
+            width: 100% !important;
+            height: 400px !important;
+        }
+
+        /* BARRA DE MEDICIONES HUD */
         .hud-mediciones {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -107,23 +144,42 @@
             border-radius: 6px;
             border: 1px solid var(--border-color);
         }
-        .hud-item { display: flex; flex-direction: column; }
-        .hud-label { font-size: 0.7rem; color: var(--text-secundario); text-transform: uppercase; }
-        .hud-valor { font-size: 1.1rem; font-weight: 700; color: #fff; font-family: 'Courier New', monospace; }
+        .hud-item {
+            display: flex;
+            flex-direction: column;
+        }
+        .hud-label {
+            font-size: 0.7rem;
+            color: var(--text-secundario);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .hud-valor {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
         .hud-valor.ch1 { color: var(--accent-cyan); }
         .hud-valor.ch2 { color: var(--accent-orange); }
+
+        /* CONTROLES DE LA GRILLA */
         .controles-grilla {
             display: flex;
             flex-wrap: wrap;
-            gap: 14px;
+            gap: 16px;
             margin-top: 12px;
             align-items: center;
-            background: rgba(0,0,0,0.2);
+            background: rgba(0,0,0,0.25);
             padding: 10px 14px;
             border-radius: 6px;
             font-size: 0.85rem;
         }
-        .grupo-control { display: flex; align-items: center; gap: 8px; }
+        .grupo-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
         label { color: var(--text-secundario); font-size: 0.85rem; }
         select, input[type=number], input[type=range] {
             background: #0c1218;
@@ -133,42 +189,82 @@
             border-radius: 4px;
             font-size: 0.85rem;
         }
-        .seccion-cursores {
-            background: rgba(0, 229, 255, 0.05);
-            border: 1px dashed rgba(0, 229, 255, 0.3);
-            border-radius: 6px;
-            padding: 12px;
-            margin-top: 12px;
-        }
-        .cursores-valores {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 8px;
-            font-family: 'Courier New', monospace;
+
+        /* TABLA DE ARM√ìNICAS */
+        table.tabla-armonicas {
+            width: 100%;
+            border-collapse: collapse;
             font-size: 0.85rem;
-            color: var(--accent-cyan);
+            text-align: center;
         }
-        table.tabla-armonicas { width: 100%; border-collapse: collapse; font-size: 0.85rem; text-align: center; }
-        table.tabla-armonicas th, table.tabla-armonicas td { padding: 8px 6px; border-bottom: 1px solid var(--border-color); }
-        table.tabla-armonicas th { background: var(--bg-panel); color: var(--text-secundario); font-weight: 600; }
+        table.tabla-armonicas th, table.tabla-armonicas td {
+            padding: 9px 6px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        table.tabla-armonicas th {
+            background: var(--bg-panel);
+            color: var(--text-secundario);
+            font-weight: 600;
+        }
         .fila-fundamental { color: var(--accent-cyan); font-weight: bold; }
         .fila-armonica2 { color: #ffd54f; font-weight: 600; }
         .fila-armonica3 { color: #ff8a65; font-weight: 600; }
-        .canvas-fft { width: 100% !important; height: 180px !important; margin-top: 10px; }
-        .control-filtro-box { display: flex; flex-direction: column; gap: 12px; }
-        .slider-box { display: flex; flex-direction: column; gap: 4px; }
-        .slider-header { display: flex; justify-content: space-between; font-size: 0.85rem; }
-        .metrologia-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.8rem; color: var(--text-secundario); }
-        .metrologia-item { background: var(--bg-panel); padding: 8px 10px; border-radius: 4px; }
-        .metrologia-item strong { color: #fff; display: block; font-size: 0.9rem; }
-        .timeline-slider { width: 100%; margin-top: 10px; }
+
+        /* ESPECTRO FFT CANVAS */
+        .canvas-fft {
+            width: 100% !important;
+            height: 185px !important;
+            margin-top: 10px;
+        }
+
+        /* CONTROLES DE FILTRO */
+        .control-filtro-box {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .slider-box {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+        }
+
+        /* METROLOG√çA */
+        .metrologia-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 0.8rem;
+            color: var(--text-secundario);
+        }
+        .metrologia-item {
+            background: var(--bg-panel);
+            padding: 8px 10px;
+            border-radius: 4px;
+        }
+        .metrologia-item strong {
+            color: #fff;
+            display: block;
+            font-size: 0.9rem;
+            margin-top: 2px;
+        }
+
+        .timeline-slider {
+            width: 100%;
+            margin-top: 12px;
+        }
     </style>
 </head>
 <body>
     <div class="contenedor">
         <header>
             <h1>
-                <span>Procesamiento Digital de SeÒales</span>
+                <span>Procesador Digital de Se√±ales</span>
                 <span class="badge-fs">Fs = 1000 Hz | Nyquist = 500 Hz</span>
             </h1>
             <div class="barra-superior-controles">
@@ -176,37 +272,40 @@
                 <button id="btnPausa" class="btn-pausa">Congelar Pantalla</button>
             </div>
         </header>
+
         <div class="layout-principal">
+            <!-- COLUMNA IZQUIERDA: OSCILOSCOPIO -->
             <div>
                 <div class="card">
                     <div class="card-titulo">
-                        <span>Osciloscopio Digital en Tiempo Real</span>
-                        <span id="txtEstado" style="font-size: 0.8rem; color: var(--accent-green);">? En Vivo</span>
+                        <span>Osciloscopio en Tiempo Real</span>
+                        <span id="txtEstado" style="font-size: 0.8rem; color: #00e676;">‚óè En Vivo</span>
                     </div>
 
                     <div class="contenedor-osciloscopio">
                         <canvas id="graficoSenal" class="canvas-osc"></canvas>
                     </div>
 
+                    <!-- HUD DE MEDICIONES AUTOM√ÅTICAS -->
                     <div class="hud-mediciones">
                         <div class="hud-item">
-                            <span class="hud-label">Freq (f0)</span>
+                            <span class="hud-label">Frecuencia (f0)</span>
                             <span class="hud-valor" id="hud-freq">0.0 Hz</span>
                         </div>
                         <div class="hud-item">
-                            <span class="hud-label">PerÌodo (T0)</span>
+                            <span class="hud-label">Per√≠odo (T0)</span>
                             <span class="hud-valor" id="hud-periodo">0.0 ms</span>
                         </div>
                         <div class="hud-item">
-                            <span class="hud-label">CH1 Vin (Vpp)</span>
+                            <span class="hud-label">CH1 Entrada (Vpp)</span>
                             <span class="hud-valor ch1" id="hud-vpp-in">0.00 V</span>
                         </div>
                         <div class="hud-item">
-                            <span class="hud-label">CH1 Vin (Vrms)</span>
+                            <span class="hud-label">CH1 Entrada (Vrms)</span>
                             <span class="hud-valor ch1" id="hud-vrms-in">0.00 V</span>
                         </div>
                         <div class="hud-item">
-                            <span class="hud-label">CH2 Vout (Vpp)</span>
+                            <span class="hud-label">CH2 Salida DAC (Vpp)</span>
                             <span class="hud-valor ch2" id="hud-vpp-out">0.00 V</span>
                         </div>
                         <div class="hud-item">
@@ -215,6 +314,7 @@
                         </div>
                     </div>
 
+                    <!-- CONTROLES DE ESCALA Y BASE DE TIEMPO -->
                     <div class="controles-grilla">
                         <div class="grupo-control">
                             <label>Base de Tiempo:</label>
@@ -228,52 +328,33 @@
                             </select>
                         </div>
                         <div class="grupo-control">
-                            <label>Escala Y:</label>
+                            <label>Escala Vertical:</label>
                             <select id="selEscalaY">
-                                <option value="7">± 7.0 V (Completa -6V a +6V)</option>
-                                <option value="4">± 4.0 V (Zoom Vertical)</option>
-                                <option value="2">± 2.0 V (Detalle)</option>
+                                <option value="7">¬± 7.0 V (Rango Completo -6V a +6V)</option>
+                                <option value="4">¬± 4.0 V (Zoom Medio)</option>
+                                <option value="2">¬± 2.0 V (Zoom Detalle)</option>
                             </select>
                         </div>
                     </div>
 
-                    <div class="seccion-cursores" id="panelCursores">
-                        <strong style="font-size:0.85rem; color:#fff;">MediciÛn en Grilla por Cursores (Consigna 2)</strong>
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:8px;">
-                            <div>
-                                <label>Cursor TensiÛn V1: <span id="lblV1">2.0</span> V</label>
-                                <input type="range" id="rngV1" min="-6" max="6" step="0.1" value="2.0" style="width:100%;">
-                                <label style="margin-top:6px; display:block;">Cursor TensiÛn V2: <span id="lblV2">-2.0</span> V</label>
-                                <input type="range" id="rngV2" min="-6" max="6" step="0.1" value="-2.0" style="width:100%;">
-                            </div>
-                            <div>
-                                <label>Cursor Tiempo T1: <span id="lblT1">20</span> %</label>
-                                <input type="range" id="rngT1" min="0" max="100" step="1" value="20" style="width:100%;">
-                                <label style="margin-top:6px; display:block;">Cursor Tiempo T2: <span id="lblT2">60</span> %</label>
-                                <input type="range" id="rngT2" min="0" max="100" step="1" value="60" style="width:100%;">
-                            </div>
-                        </div>
-                        <div class="cursores-valores">
-                            <span>?V = <b id="valDeltaV">4.00 V</b></span>
-                            <span>?t = <b id="valDeltaT">40.0 ms</b></span>
-                            <span>Freq Medida (1/?t) = <b id="valFreqCursor">25.0 Hz</b></span>
-                        </div>
-                    </div>
-
+                    <!-- SLIDER HISTORIAL (MODO PAUSA) -->
                     <input type="range" id="sliderHistoria" class="timeline-slider" min="0" max="0" value="0" disabled title="Desplazarse en el historial">
                 </div>
             </div>
+
+            <!-- COLUMNA DERECHA: FILTROS, FFT Y METROLOG√çA -->
             <div>
+                <!-- FILTRO DIGITAL EN TIEMPO REAL -->
                 <div class="card">
                     <div class="card-titulo">
-                        <span>Filtro Digital IIR (Consigna 4)</span>
-                        <span style="font-size:0.75rem; color:var(--accent-cyan);">Hardware STM32</span>
+                        <span>Filtro Digital IIR</span>
+                        <span style="font-size:0.75rem; color:#00e5ff;">Hardware STM32</span>
                     </div>
                     <div class="control-filtro-box">
                         <div>
                             <label>Tipo de Filtro:</label>
                             <select id="selFiltro" style="width: 100%; margin-top: 4px;">
-                                <option value="ninguno">SeÒal Original (Sin Filtro / Bypass)</option>
+                                <option value="ninguno">Se√±al Original (Sin Filtro / Bypass)</option>
                                 <option value="pasabajas">Filtro Pasabajas (LPF)</option>
                                 <option value="pasaaltos">Filtro Pasaaltos (HPF)</option>
                                 <option value="pasabanda">Filtro Pasabanda (BPF)</option>
@@ -282,27 +363,28 @@
                         <div class="slider-box">
                             <div class="slider-header">
                                 <label>Frecuencia de Corte (fc):</label>
-                                <span style="font-weight:bold; color:var(--accent-orange);"><span id="lblFc">20.0</span> Hz</span>
+                                <span style="font-weight:bold; color:#ff9100;"><span id="lblFc">20.0</span> Hz</span>
                             </div>
                             <input type="range" id="sliderFc" min="1" max="120" step="0.5" value="20.0">
                         </div>
-                        <div style="font-size: 0.75rem; color: var(--text-secundario);">
-                            * La seÒal filtrada se procesa en tiempo real a 1000 Hz y se entrega fÌsicamente por el DAC (0-3.3V) al osciloscopio.
+                        <div style="font-size: 0.75rem; color: var(--text-secundario); line-height: 1.4;">
+                            * La se√±al filtrada se procesa en tiempo real a 1000 Hz en el microcontrolador y se entrega f√≠sicamente por el DAC (0 a 3.3V) hacia el osciloscopio externo.
                         </div>
                     </div>
                 </div>
 
+                <!-- TRANSFORMADA DE FOURIER Y ARM√ìNICAS -->
                 <div class="card">
                     <div class="card-titulo">
-                        <span>Espectro FFT y ArmÛnicas (Consigna 3)</span>
-                        <span style="font-size:0.75rem; color:var(--accent-orange);" id="txtThd">THD: 0.0%</span>
+                        <span>Espectro FFT y Arm√≥nicas</span>
+                        <span style="font-size:0.75rem; color:#ff9100;" id="txtThd">THD: 0.0%</span>
                     </div>
 
                     <table class="tabla-armonicas">
                         <thead>
                             <tr>
                                 <th>#</th>
-                                <th>ArmÛnica</th>
+                                <th>Arm√≥nica</th>
                                 <th>Frec (Hz)</th>
                                 <th>Vp</th>
                                 <th>Vpp</th>
@@ -320,7 +402,7 @@
                             </tr>
                             <tr class="fila-armonica2">
                                 <td>2</td>
-                                <td>2™ ArmÛnica</td>
+                                <td>2¬™ Arm√≥nica</td>
                                 <td id="h2-f">0.0</td>
                                 <td id="h2-a">0.00</td>
                                 <td id="h2-vpp">0.00</td>
@@ -328,7 +410,7 @@
                             </tr>
                             <tr class="fila-armonica3">
                                 <td>3</td>
-                                <td>3™ ArmÛnica</td>
+                                <td>3¬™ Arm√≥nica</td>
                                 <td id="h3-f">0.0</td>
                                 <td id="h3-a">0.00</td>
                                 <td id="h3-vpp">0.00</td>
@@ -340,9 +422,10 @@
                     <canvas id="graficoFFT" class="canvas-fft"></canvas>
                 </div>
 
+                <!-- ESPECIFICACIONES METROL√ìGICAS -->
                 <div class="card">
                     <div class="card-titulo">
-                        <span>MetrologÌa del Sistema</span>
+                        <span>Metrolog√≠a del Sistema</span>
                     </div>
                     <div class="metrologia-grid">
                         <div class="metrologia-item">
@@ -350,7 +433,7 @@
                             <strong>341.3 cuentas/V</strong>
                         </div>
                         <div class="metrologia-item">
-                            <span>PrecisiÛn / Res.</span>
+                            <span>Precisi√≥n / Res.</span>
                             <strong>2.93 mV/nivel</strong>
                         </div>
                         <div class="metrologia-item">
@@ -366,9 +449,11 @@
             </div>
         </div>
     </div>
+
     <script>
         const socket = io();
 
+        // Referencias DOM
         const selFiltro = document.getElementById('selFiltro');
         const sliderFc = document.getElementById('sliderFc');
         const lblFc = document.getElementById('lblFc');
@@ -384,6 +469,7 @@
         let bufferHistorial = [];
         const MAX_HISTORIAL = 4000;
 
+        // Control de filtros hacia Python / Microcontrolador
         function enviarFiltro() {
             lblFc.innerText = parseFloat(sliderFc.value).toFixed(1);
             socket.emit('actualizar_filtro', {
@@ -395,26 +481,28 @@
         sliderFc.addEventListener('input', () => lblFc.innerText = parseFloat(sliderFc.value).toFixed(1));
         sliderFc.addEventListener('change', enviarFiltro);
 
+        // Control de inicio y parada de muestreo
         btnMuestreo.addEventListener('click', () => {
             muestreoActivo = !muestreoActivo;
             socket.emit('control_muestreo', { activo: muestreoActivo });
             btnMuestreo.innerText = muestreoActivo ? "Detener Muestreo" : "Iniciar Muestreo";
             btnMuestreo.className = muestreoActivo ? "btn-detener" : "btn-iniciar";
-            txtEstado.innerText = muestreoActivo ? "? En Vivo" : "? AdquisiciÛn Detenida";
-            txtEstado.style.color = muestreoActivo ? "var(--accent-green)" : "var(--accent-red)";
+            txtEstado.innerText = muestreoActivo ? "‚óè En Vivo" : "‚èπ Adquisici√≥n Detenida";
+            txtEstado.style.color = muestreoActivo ? "#00e676" : "#ff3d00";
         });
 
+        // Congelar y reanudar pantalla
         btnPausa.addEventListener('click', () => {
             estaPausado = !estaPausado;
             btnPausa.innerText = estaPausado ? "Reanudar Pantalla" : "Congelar Pantalla";
             btnPausa.classList.toggle("pausado", estaPausado);
             sliderHistoria.disabled = !estaPausado;
             if (estaPausado) {
-                txtEstado.innerText = "? Pantalla Congelada";
-                txtEstado.style.color = "var(--accent-orange)";
+                txtEstado.innerText = "‚è∏ Pantalla Congelada";
+                txtEstado.style.color = "#ff9100";
             } else {
-                txtEstado.innerText = muestreoActivo ? "? En Vivo" : "? AdquisiciÛn Detenida";
-                txtEstado.style.color = muestreoActivo ? "var(--accent-green)" : "var(--accent-red)";
+                txtEstado.innerText = muestreoActivo ? "‚óè En Vivo" : "‚èπ Adquisici√≥n Detenida";
+                txtEstado.style.color = muestreoActivo ? "#00e676" : "#ff3d00";
                 dibujarOsciloscopio(bufferHistorial.length - 1);
             }
         });
@@ -424,6 +512,7 @@
             dibujarOsciloscopio(parseInt(this.value));
         });
 
+        // Inicializaci√≥n de Gr√°fica del Osciloscopio
         const ctxOsc = document.getElementById('graficoSenal').getContext('2d');
         let escalaYMax = 7.0;
         let baseTiempoMs = 100;
@@ -483,11 +572,12 @@
 
         selBaseTiempo.addEventListener('change', () => {
             baseTiempoMs = parseInt(selBaseTiempo.value);
-            actualizarCursores();
             if (!estaPausado && bufferHistorial.length > 0) {
                 dibujarOsciloscopio(bufferHistorial.length - 1);
             }
         });
+
+        // Inicializaci√≥n de Gr√°fica FFT
         const ctxFFT = document.getElementById('graficoFFT').getContext('2d');
         const chartFFT = new Chart(ctxFFT, {
             type: 'bar',
@@ -520,6 +610,7 @@
             }
         });
 
+        // Recepci√≥n de datos WebSocket
         socket.on('datos_dsp', function(paquete) {
             let muestras = paquete.muestras || [];
             for (let i = 0; i < muestras.length; i++) {
@@ -557,10 +648,10 @@
             let maxOut = Math.max(...vouts), minOut = Math.min(...vouts);
             let vppIn = maxIn - minIn;
             let vppOut = maxOut - minOut;
-            let ganancia = vppIn > 0.1 ? (vppOut / vppIn).toFixed(2) : "1.00";
+            let ganancia = vppIn > 0.1 ? (vppOut / vppIn).toFixed(2) : '1.00';
 
-            document.getElementById('hud-vpp-in').innerText = vppIn.toFixed(2) + " V";
-            document.getElementById('hud-vpp-out').innerText = vppOut.toFixed(2) + " V";
+            document.getElementById('hud-vpp-in').innerText = vppIn.toFixed(2) + ' V';
+            document.getElementById('hud-vpp-out').innerText = vppOut.toFixed(2) + ' V';
             document.getElementById('hud-ganancia').innerText = ganancia;
         }
 
@@ -570,64 +661,32 @@
                 document.getElementById('h1-f').innerText = armas[0].frec.toFixed(1);
                 document.getElementById('h1-a').innerText = armas[0].amp.toFixed(2);
                 document.getElementById('h1-vpp').innerText = armas[0].vpp.toFixed(2);
-                document.getElementById('hud-freq').innerText = armas[0].frec.toFixed(1) + " Hz";
-                let per = armas[0].frec > 0.1 ? (1000.0 / armas[0].frec).toFixed(1) : "0.0";
-                document.getElementById('hud-periodo').innerText = per + " ms";
+                document.getElementById('hud-freq').innerText = armas[0].frec.toFixed(1) + ' Hz';
+                let per = armas[0].frec > 0.1 ? (1000.0 / armas[0].frec).toFixed(1) : '0.0';
+                document.getElementById('hud-periodo').innerText = per + ' ms';
             }
             if (armas[1]) {
                 document.getElementById('h2-f').innerText = armas[1].frec.toFixed(1);
                 document.getElementById('h2-a').innerText = armas[1].amp.toFixed(2);
                 document.getElementById('h2-vpp').innerText = armas[1].vpp.toFixed(2);
-                document.getElementById('h2-pct').innerText = armas[1].pct.toFixed(1) + "%";
+                document.getElementById('h2-pct').innerText = armas[1].pct.toFixed(1) + '%';
             }
             if (armas[2]) {
                 document.getElementById('h3-f').innerText = armas[2].frec.toFixed(1);
                 document.getElementById('h3-a').innerText = armas[2].amp.toFixed(2);
                 document.getElementById('h3-vpp').innerText = armas[2].vpp.toFixed(2);
-                document.getElementById('h3-pct').innerText = armas[2].pct.toFixed(1) + "%";
+                document.getElementById('h3-pct').innerText = armas[2].pct.toFixed(1) + '%';
             }
 
-            document.getElementById('txtThd').innerText = "THD: " + info.thd.toFixed(1) + "%";
-            if (info.v_rms) document.getElementById('hud-vrms-in').innerText = info.v_rms.toFixed(2) + " V";
+            document.getElementById('txtThd').innerText = 'THD: ' + info.thd.toFixed(1) + '%';
+            if (info.v_rms) document.getElementById('hud-vrms-in').innerText = info.v_rms.toFixed(2) + ' V';
 
             if (info.espectro && info.espectro.length > 0) {
-                chartFFT.data.labels = info.espectro.map(e => e.frec + "Hz");
+                chartFFT.data.labels = info.espectro.map(e => e.frec + 'Hz');
                 chartFFT.data.datasets[0].data = info.espectro.map(e => e.amp);
                 chartFFT.update();
             }
         }
-
-        const rngV1 = document.getElementById('rngV1');
-        const rngV2 = document.getElementById('rngV2');
-        const rngT1 = document.getElementById('rngT1');
-        const rngT2 = document.getElementById('rngT2');
-
-        function actualizarCursores() {
-            let v1 = parseFloat(rngV1.value);
-            let v2 = parseFloat(rngV2.value);
-            document.getElementById('lblV1').innerText = v1.toFixed(1);
-            document.getElementById('lblV2').innerText = v2.toFixed(1);
-            let deltaV = Math.abs(v1 - v2);
-            document.getElementById('valDeltaV').innerText = deltaV.toFixed(2) + " V";
-
-            let t1Pct = parseFloat(rngT1.value);
-            let t2Pct = parseFloat(rngT2.value);
-            document.getElementById('lblT1').innerText = t1Pct;
-            document.getElementById('lblT2').innerText = t2Pct;
-
-            let deltaTPct = Math.abs(t2Pct - t1Pct) / 100.0;
-            let deltaTMs = deltaTPct * baseTiempoMs;
-            document.getElementById('valDeltaT').innerText = deltaTMs.toFixed(1) + " ms";
-
-            let fCursor = deltaTMs > 0.1 ? (1000.0 / deltaTMs).toFixed(1) : "---";
-            document.getElementById('valFreqCursor').innerText = fCursor + " Hz";
-        }
-
-        rngV1.addEventListener('input', actualizarCursores);
-        rngV2.addEventListener('input', actualizarCursores);
-        rngT1.addEventListener('input', actualizarCursores);
-        rngT2.addEventListener('input', actualizarCursores);
-        actualizarCursores();
     </script>
 </body>
 </html>

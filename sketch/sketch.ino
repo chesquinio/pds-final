@@ -7,7 +7,6 @@
 #define PIN_DAC DAC0
 const int pinADC = A4;
 
-// Conversión física de niveles de tensión (+/- 6V <-> 0..3.3V)
 // R1 = 12k (entrada), R2 = 10k (+5V), R3 = 8.2k (GND)
 // Para Vin = -6V -> V_adc = 0.00V
 // Para Vin = 0V  -> V_adc = 1.6378V
@@ -30,7 +29,7 @@ inline int voltajeADac(float v) {
   return dac;
 }
 
-// Parámetros de muestreo
+// Muestreo
 const float DT_FILTRO = 0.001f; // 1 ms = 1000 Hz
 
 // Estado de Filtros
@@ -109,13 +108,11 @@ inline float aplicarFiltro(float x_act) {
   return salida;
 }
 
-// BUFFER CIRCULAR LOCK-FREE PARA TELEMETRÍA
 // Almacena hasta 1024 pares (vin_mv, vout_mv) como int16_t
-// A 1000 Hz, 1024 muestras = > 1 segundo de amortiguación
 const int RING_BUFFER_SIZE = 1024;
 int16_t ring_vin[RING_BUFFER_SIZE];
 int16_t ring_vout[RING_BUFFER_SIZE];
-volatile uint32_t ring_head = 0; // Leído por RPC
+volatile uint32_t ring_head = 0;
 volatile uint32_t ring_tail = 0; // Escrito por Sampler Thread
 
 inline void ring_push(int16_t vin_mv, int16_t vout_mv) {
