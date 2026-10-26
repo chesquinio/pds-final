@@ -3,447 +3,453 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Osciloscopio Digital y Analizador de Espectro FFT</title>
+    <title>Osciloscopio Digital & Analizador FFT</title>
     <script src="libs/socket.io.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         :root {
-            --bg-principal: #121820;
-            --bg-card: #1b232e;
-            --bg-panel: #222d3d;
-            --border-color: #2e3d52;
-            --accent-cyan: #00e5ff;
-            --accent-orange: #ff9100;
+            --bg-body: #0a0e17;
+            --bg-card: #121824;
+            --bg-panel: #182232;
+            --border: rgba(255, 255, 255, 0.08);
+            --ch1: #00e5ff;
+            --ch2: #ff9100;
             --accent-green: #00e676;
             --accent-red: #ff3d00;
-            --text-principal: #f0f4f8;
-            --text-secundario: #90a4ae;
+            --accent-amber: #ffd600;
+            --text-main: #f1f5f9;
+            --text-muted: #8292a6;
         }
 
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-            background: var(--bg-principal);
-            color: var(--text-principal);
-            margin: 0;
-            padding: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg-body);
+            color: var(--text-main);
+            padding: 14px;
+            min-height: 100vh;
         }
 
-        .contenedor {
+        .container {
             max-width: 1400px;
             margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
-        /* ENCABEZADO */
+        /* HEADER */
         header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             background: var(--bg-card);
-            padding: 14px 20px;
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            padding: 10px 16px;
+            border-radius: 10px;
         }
-        h1 {
-            margin: 0;
-            font-size: 1.35rem;
-            color: #fff;
+        .header-left {
             display: flex;
             align-items: center;
             gap: 12px;
+        }
+        .app-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            letter-spacing: -0.3px;
+        }
+        .app-title .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--ch1);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--ch1);
         }
         .badge-fs {
-            background: rgba(0, 229, 255, 0.12);
-            color: var(--accent-cyan);
-            border: 1px solid var(--accent-cyan);
-            font-size: 0.75rem;
-            padding: 3px 10px;
-            border-radius: 4px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-        }
-
-        .barra-superior-controles {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        /* BOTONES */
-        button {
-            border: none;
-            padding: 9px 18px;
+            font-size: 0.72rem;
+            padding: 3px 8px;
             border-radius: 6px;
             font-weight: 600;
-            cursor: pointer;
-            display: inline-flex;
+            background: rgba(0, 229, 255, 0.1);
+            color: var(--ch1);
+            border: 1px solid rgba(0, 229, 255, 0.25);
+        }
+        .estado-pill {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-green);
+        }
+        .header-actions {
+            display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.85rem;
-            transition: all 0.2s ease;
+            gap: 8px;
+        }
+        button {
+            border: none;
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
         }
         .btn-iniciar { background: var(--accent-green); color: #000; }
-        .btn-detener { background: var(--accent-red); color: #fff; }
-        .btn-pausa { background: #37474f; color: #fff; border: 1px solid #546e7a; }
-        .btn-pausa.pausado { background: #d32f2f; border-color: #f44336; }
-        button:hover { filter: brightness(1.15); transform: translateY(-1px); }
+        .btn-detener { background: rgba(255, 61, 0, 0.15); color: #ff5722; border: 1px solid rgba(255, 61, 0, 0.4); }
+        .btn-detener:hover { background: var(--accent-red); color: #fff; }
+        .btn-pausa { background: var(--bg-panel); color: var(--text-main); border: 1px solid var(--border); }
+        .btn-pausa:hover { border-color: var(--text-muted); }
+        .btn-pausa.pausado { background: rgba(255, 214, 0, 0.15); color: var(--accent-amber); border-color: var(--accent-amber); }
 
-        /* GRID PRINCIPAL */
-        .layout-principal {
+        /* GRID */
+        .main-grid {
             display: grid;
-            grid-template-columns: 1fr 410px;
-            gap: 16px;
+            grid-template-columns: 1fr 380px;
+            gap: 12px;
+        }
+        @media (max-width: 1024px) {
+            .main-grid { grid-template-columns: 1fr; }
         }
 
-        @media (max-width: 1050px) {
-            .layout-principal { grid-template-columns: 1fr; }
-        }
-
-        /* TARJETAS */
         .card {
             background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 16px;
-            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        .card-titulo {
-            font-size: 1.05rem;
-            margin-top: 0;
-            margin-bottom: 12px;
-            color: #eceff1;
+        .card-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border-color);
-            padding-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
         }
-
-        /* OSCILOSCOPIO DISPLAY */
-        .contenedor-osciloscopio {
-            position: relative;
-            background: #080c11;
-            border-radius: 6px;
-            border: 2px solid #1e293b;
-            padding: 8px;
-        }
-        .canvas-osc {
-            width: 100% !important;
-            height: 400px !important;
-        }
-
-        /* BARRA DE MEDICIONES HUD */
-        .hud-mediciones {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-            gap: 10px;
-            margin-top: 12px;
-            background: var(--bg-panel);
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: 1px solid var(--border-color);
-        }
-        .hud-item {
-            display: flex;
-            flex-direction: column;
-        }
-        .hud-label {
-            font-size: 0.7rem;
-            color: var(--text-secundario);
+        .card-header h2 {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #dbe4ee;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .hud-valor {
-            font-size: 1.15rem;
-            font-weight: 700;
-            color: #fff;
-            font-family: 'Courier New', monospace;
-        }
-        .hud-valor.ch1 { color: var(--accent-cyan); }
-        .hud-valor.ch2 { color: var(--accent-orange); }
 
-        /* CONTROLES DE LA GRILLA */
-        .controles-grilla {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px;
-            margin-top: 12px;
-            align-items: center;
-            background: rgba(0,0,0,0.25);
-            padding: 10px 14px;
-            border-radius: 6px;
-            font-size: 0.85rem;
+        /* OSCILOSCOPIO */
+        .osc-screen {
+            position: relative;
+            background: #05080e;
+            border-radius: 8px;
+            border: 1px solid #1a2536;
+            overflow: hidden;
+            height: 380px;
         }
-        .grupo-control {
-            display: flex;
-            align-items: center;
+        .canvas-osc {
+            width: 100% !important;
+            height: 100% !important;
+        }
+
+        /* METRICS HUD */
+        .metrics-hud {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
             gap: 8px;
         }
-        label { color: var(--text-secundario); font-size: 0.85rem; }
-        select, input[type=number], input[type=range] {
-            background: #0c1218;
-            color: #fff;
-            border: 1px solid var(--border-color);
-            padding: 6px 10px;
-            border-radius: 4px;
-            font-size: 0.85rem;
+        @media (max-width: 768px) {
+            .metrics-hud { grid-template-columns: repeat(3, 1fr); }
         }
-
-        /* TABLA DE ARMÓNICAS */
-        table.tabla-armonicas {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-            text-align: center;
-        }
-        table.tabla-armonicas th, table.tabla-armonicas td {
-            padding: 9px 6px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        table.tabla-armonicas th {
+        .hud-box {
             background: var(--bg-panel);
-            color: var(--text-secundario);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .hud-lbl {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
             font-weight: 600;
+            letter-spacing: 0.4px;
         }
-        .fila-fundamental { color: var(--accent-cyan); font-weight: bold; }
-        .fila-armonica2 { color: #ffd54f; font-weight: 600; }
-        .fila-armonica3 { color: #ff8a65; font-weight: 600; }
+        .hud-val {
+            font-size: 1.05rem;
+            font-weight: 700;
+            font-family: 'SF Mono', Monaco, Consolas, monospace;
+            color: #fff;
+        }
+        .hud-val.ch1 { color: var(--ch1); }
+        .hud-val.ch2 { color: var(--ch2); }
 
-        /* ESPECTRO FFT CANVAS */
-        .canvas-fft {
-            width: 100% !important;
-            height: 185px !important;
-            margin-top: 10px;
-        }
-
-        /* CONTROLES DE FILTRO */
-        .control-filtro-box {
-            display: flex;
-            flex-direction: column;
-            gap: 14px;
-        }
-        .slider-box {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-        .slider-header {
+        /* OSC CONTROLS */
+        .osc-controls {
             display: flex;
             justify-content: space-between;
-            font-size: 0.85rem;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            background: rgba(0,0,0,0.25);
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
         }
-
-        /* METROLOGÍA */
-        .metrologia-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
+        .control-group {
+            display: flex;
+            align-items: center;
             gap: 8px;
             font-size: 0.8rem;
-            color: var(--text-secundario);
+            color: var(--text-muted);
         }
-        .metrologia-item {
+        select {
             background: var(--bg-panel);
-            padding: 8px 10px;
-            border-radius: 4px;
-        }
-        .metrologia-item strong {
             color: #fff;
-            display: block;
-            font-size: 0.9rem;
-            margin-top: 2px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            outline: none;
+            cursor: pointer;
         }
+        select:focus { border-color: var(--ch1); }
 
         .timeline-slider {
             width: 100%;
-            margin-top: 12px;
+            height: 4px;
+            accent-color: var(--accent-amber);
+            cursor: pointer;
+        }
+
+        /* SIDEBAR */
+        .side-col {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* FILTRO */
+        .filter-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .slider-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .slider-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+        }
+        .slider-val {
+            font-weight: 700;
+            color: var(--ch2);
+            font-family: monospace;
+            font-size: 0.85rem;
+        }
+        input[type=range] {
+            width: 100%;
+            accent-color: var(--ch2);
+        }
+
+        /* TABLA ARMONICAS */
+        table.harmonics-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        table.harmonics-table th {
+            text-align: left;
+            padding: 6px 8px;
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 0.68rem;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+        }
+        table.harmonics-table td {
+            padding: 7px 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-family: monospace;
+        }
+        .row-h1 { color: var(--ch1); font-weight: 700; }
+        .row-h2 { color: #ffe082; }
+        .row-h3 { color: #ffab91; }
+        .badge-out {
+            font-size: 0.68rem;
+            padding: 2px 6px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            color: var(--text-muted);
+        }
+
+        .canvas-fft {
+            width: 100% !important;
+            height: 140px !important;
+            margin-top: 4px;
         }
     </style>
 </head>
 <body>
-    <div class="contenedor">
+    <div class="container">
+        <!-- HEADER -->
         <header>
-            <h1>
-                <span>Procesador Digital de Señales</span>
-                <span class="badge-fs">Fs = 1000 Hz | Nyquist = 500 Hz</span>
-            </h1>
-            <div class="barra-superior-controles">
-                <button id="btnMuestreo" class="btn-detener">Detener Muestreo</button>
-                <button id="btnPausa" class="btn-pausa">Congelar Pantalla</button>
+            <div class="header-left">
+                <div class="app-title">
+                    <span class="dot"></span>
+                    <span>Osciloscopio & DSP</span>
+                </div>
+                <span class="badge-fs" id="badge-fs">Fs: 500 Hz | Nyq: 250 Hz</span>
+                <span class="estado-pill" id="txtEstado">● En Vivo</span>
+            </div>
+            <div class="header-actions">
+                <button id="btnPausa" class="btn-pausa">Congelar</button>
+                <button id="btnMuestreo" class="btn-detener">Detener</button>
             </div>
         </header>
 
-        <div class="layout-principal">
+        <!-- MAIN LAYOUT -->
+        <div class="main-grid">
             <!-- COLUMNA IZQUIERDA: OSCILOSCOPIO -->
-            <div>
-                <div class="card">
-                    <div class="card-titulo">
-                        <span>Osciloscopio en Tiempo Real</span>
-                        <span id="txtEstado" style="font-size: 0.8rem; color: #00e676;">● En Vivo</span>
+            <div class="card">
+                <div class="card-header">
+                    <h2>Señal en Tiempo Real</h2>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">
+                        <span style="color:var(--ch1); font-weight:bold;">━ CH1 In</span> &nbsp;
+                        <span style="color:var(--ch2); font-weight:bold;">━ CH2 DAC</span>
                     </div>
-
-                    <div class="contenedor-osciloscopio">
-                        <canvas id="graficoSenal" class="canvas-osc"></canvas>
-                    </div>
-
-                    <!-- HUD DE MEDICIONES AUTOMÁTICAS -->
-                    <div class="hud-mediciones">
-                        <div class="hud-item">
-                            <span class="hud-label">Frecuencia (f0)</span>
-                            <span class="hud-valor" id="hud-freq">0.0 Hz</span>
-                        </div>
-                        <div class="hud-item">
-                            <span class="hud-label">Período (T0)</span>
-                            <span class="hud-valor" id="hud-periodo">0.0 ms</span>
-                        </div>
-                        <div class="hud-item">
-                            <span class="hud-label">CH1 Entrada (Vpp)</span>
-                            <span class="hud-valor ch1" id="hud-vpp-in">0.00 V</span>
-                        </div>
-                        <div class="hud-item">
-                            <span class="hud-label">CH1 Entrada (Vrms)</span>
-                            <span class="hud-valor ch1" id="hud-vrms-in">0.00 V</span>
-                        </div>
-                        <div class="hud-item">
-                            <span class="hud-label">CH2 Salida DAC (Vpp)</span>
-                            <span class="hud-valor ch2" id="hud-vpp-out">0.00 V</span>
-                        </div>
-                        <div class="hud-item">
-                            <span class="hud-label">Ganancia (Vout/Vin)</span>
-                            <span class="hud-valor ch2" id="hud-ganancia">1.00</span>
-                        </div>
-                    </div>
-
-                    <!-- CONTROLES DE ESCALA Y BASE DE TIEMPO -->
-                    <div class="controles-grilla">
-                        <div class="grupo-control">
-                            <label>Base de Tiempo:</label>
-                            <select id="selBaseTiempo">
-                                <option value="20">20 ms (Zoom Alta Frecuencia / 100 Hz)</option>
-                                <option value="50">50 ms (30 - 50 Hz)</option>
-                                <option value="100" selected>100 ms (10 - 30 Hz)</option>
-                                <option value="200">200 ms (5 - 10 Hz)</option>
-                                <option value="500">500 ms (2 - 5 Hz)</option>
-                                <option value="1000">1000 ms (1 Hz / Envolvente)</option>
-                            </select>
-                        </div>
-                        <div class="grupo-control">
-                            <label>Escala Vertical:</label>
-                            <select id="selEscalaY">
-                                <option value="7">± 7.0 V (Rango Completo -6V a +6V)</option>
-                                <option value="4">± 4.0 V (Zoom Medio)</option>
-                                <option value="2">± 2.0 V (Zoom Detalle)</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <!-- SLIDER HISTORIAL (MODO PAUSA) -->
-                    <input type="range" id="sliderHistoria" class="timeline-slider" min="0" max="0" value="0" disabled title="Desplazarse en el historial">
                 </div>
+
+                <div class="osc-screen">
+                    <canvas id="graficoSenal" class="canvas-osc"></canvas>
+                </div>
+
+                <!-- HUD MEDICIONES -->
+                <div class="metrics-hud">
+                    <div class="hud-box">
+                        <span class="hud-lbl">Frecuencia (f0)</span>
+                        <span class="hud-val ch1" id="hud-freq">0.0 Hz</span>
+                    </div>
+                    <div class="hud-box">
+                        <span class="hud-lbl">Período (T0)</span>
+                        <span class="hud-val" id="hud-periodo">0.0 ms</span>
+                    </div>
+                    <div class="hud-box">
+                        <span class="hud-lbl">CH1 (Vpp)</span>
+                        <span class="hud-val ch1" id="hud-vpp-in">0.00 V</span>
+                    </div>
+                    <div class="hud-box">
+                        <span class="hud-lbl">CH1 (Vrms)</span>
+                        <span class="hud-val ch1" id="hud-vrms-in">0.00 V</span>
+                    </div>
+                    <div class="hud-box">
+                        <span class="hud-lbl">CH2 DAC (Vpp)</span>
+                        <span class="hud-val ch2" id="hud-vpp-out">0.00 V</span>
+                    </div>
+                    <div class="hud-box">
+                        <span class="hud-lbl">Ganancia (V/V)</span>
+                        <span class="hud-val" id="hud-ganancia">1.00</span>
+                    </div>
+                </div>
+
+                <!-- CONTROLES RAPIDOS -->
+                <div class="osc-controls">
+                    <div class="control-group">
+                        <label>Base de Tiempo (X):</label>
+                        <select id="selBaseTiempo">
+                            <option value="2">2 ms / div</option>
+                            <option value="5">5 ms / div</option>
+                            <option value="10" selected>10 ms / div</option>
+                            <option value="20">20 ms / div</option>
+                            <option value="50">50 ms / div</option>
+                            <option value="100">100 ms / div</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Escala (Y):</label>
+                        <select id="selEscalaY">
+                            <option value="0.5">0.5 V / div (±2 V)</option>
+                            <option value="1">1 V / div (±4 V)</option>
+                            <option value="2" selected>2 V / div (±7 V)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- SLIDER HISTORIAL -->
+                <input type="range" id="sliderHistoria" class="timeline-slider" min="0" max="0" value="0" disabled title="Desplazarse en pausa">
             </div>
 
-            <!-- COLUMNA DERECHA: FILTROS, FFT Y METROLOGÍA -->
-            <div>
-                <!-- FILTRO DIGITAL EN TIEMPO REAL -->
+            <!-- COLUMNA DERECHA: FILTRO + FFT -->
+            <div class="side-col">
+                <!-- TARJETA FILTRO IIR -->
                 <div class="card">
-                    <div class="card-titulo">
-                        <span>Filtro Digital IIR</span>
-                        <span style="font-size:0.75rem; color:#00e5ff;">Hardware STM32</span>
+                    <div class="card-header">
+                        <h2>Filtro Digital IIR</h2>
+                        <span style="font-size:0.7rem; color:var(--ch1); font-weight:600;">Hardware STM32</span>
                     </div>
-                    <div class="control-filtro-box">
-                        <div>
-                            <label>Tipo de Filtro:</label>
-                            <select id="selFiltro" style="width: 100%; margin-top: 4px;">
-                                <option value="ninguno">Señal Original (Sin Filtro / Bypass)</option>
-                                <option value="pasabajas">Filtro Pasabajas (LPF)</option>
-                                <option value="pasaaltos">Filtro Pasaaltos (HPF)</option>
-                                <option value="pasabanda">Filtro Pasabanda (BPF)</option>
-                            </select>
-                        </div>
-                        <div class="slider-box">
-                            <div class="slider-header">
-                                <label>Frecuencia de Corte (fc):</label>
-                                <span style="font-weight:bold; color:#ff9100;"><span id="lblFc">20.0</span> Hz</span>
+                    <div class="filter-controls">
+                        <select id="selFiltro" style="width:100%;">
+                            <option value="ninguno">Sin Filtro (Bypass)</option>
+                            <option value="pasabajas">Pasabajas (LPF)</option>
+                            <option value="pasaaltos">Pasaaltos (HPF)</option>
+                            <option value="pasabanda">Pasabanda (BPF)</option>
+                        </select>
+                        <div class="slider-row">
+                            <div class="slider-info">
+                                <span>Frecuencia de Corte (fc):</span>
+                                <span class="slider-val"><span id="lblFc">20.0</span> Hz</span>
                             </div>
-                            <input type="range" id="sliderFc" min="1" max="120" step="0.5" value="20.0">
-                        </div>
-                        <div style="font-size: 0.75rem; color: var(--text-secundario); line-height: 1.4;">
-                            * La señal filtrada se procesa en tiempo real a 1000 Hz en el microcontrolador y se entrega físicamente por el DAC (0 a 3.3V) hacia el osciloscopio externo.
+                            <input type="range" id="sliderFc" min="1" max="100" step="0.5" value="20.0">
                         </div>
                     </div>
                 </div>
 
-                <!-- TRANSFORMADA DE FOURIER Y ARMÓNICAS -->
+                <!-- TARJETA FFT Y ARMONICAS -->
                 <div class="card">
-                    <div class="card-titulo">
-                        <span>Espectro FFT y Armónicas</span>
-                        <span style="font-size:0.75rem; color:#ff9100;" id="txtThd">THD: 0.0%</span>
+                    <div class="card-header">
+                        <h2>Espectro FFT & Armónicas</h2>
+                        <span id="txtThd" style="font-size:0.8rem; font-weight:700; color:var(--ch2);">THD: 0.0%</span>
                     </div>
 
-                    <table class="tabla-armonicas">
+                    <table class="harmonics-table">
                         <thead>
                             <tr>
-                                <th>#</th>
                                 <th>Armónica</th>
-                                <th>Frec (Hz)</th>
-                                <th>Vp</th>
+                                <th>Frec</th>
                                 <th>Vpp</th>
-                                <th>% Fund</th>
+                                <th>%</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr class="fila-fundamental">
-                                <td>1</td>
-                                <td>Fundamental</td>
-                                <td id="h1-f">0.0</td>
-                                <td id="h1-a">0.00</td>
-                                <td id="h1-vpp">0.00</td>
+                            <tr class="row-h1">
+                                <td>1ª Fundamental</td>
+                                <td id="h1-f">0.0 Hz</td>
+                                <td id="h1-vpp">0.00 V</td>
                                 <td>100%</td>
                             </tr>
-                            <tr class="fila-armonica2">
-                                <td>2</td>
+                            <tr class="row-h2">
                                 <td>2ª Armónica</td>
-                                <td id="h2-f">0.0</td>
-                                <td id="h2-a">0.00</td>
-                                <td id="h2-vpp">0.00</td>
+                                <td id="h2-f">0.0 Hz</td>
+                                <td id="h2-vpp">0.00 V</td>
                                 <td id="h2-pct">0%</td>
                             </tr>
-                            <tr class="fila-armonica3">
-                                <td>3</td>
+                            <tr class="row-h3">
                                 <td>3ª Armónica</td>
-                                <td id="h3-f">0.0</td>
-                                <td id="h3-a">0.00</td>
-                                <td id="h3-vpp">0.00</td>
+                                <td id="h3-f">0.0 Hz</td>
+                                <td id="h3-vpp">0.00 V</td>
                                 <td id="h3-pct">0%</td>
                             </tr>
                         </tbody>
                     </table>
 
-                    <canvas id="graficoFFT" class="canvas-fft"></canvas>
-                </div>
-
-                <!-- ESPECIFICACIONES METROLÓGICAS -->
-                <div class="card">
-                    <div class="card-titulo">
-                        <span>Metrología del Sistema</span>
-                    </div>
-                    <div class="metrologia-grid">
-                        <div class="metrologia-item">
-                            <span>Sensibilidad</span>
-                            <strong>341.3 cuentas/V</strong>
-                        </div>
-                        <div class="metrologia-item">
-                            <span>Precisión / Res.</span>
-                            <strong>2.93 mV/nivel</strong>
-                        </div>
-                        <div class="metrologia-item">
-                            <span>Ganancia Global</span>
-                            <strong>0.275 V/V (-11.2 dB)</strong>
-                        </div>
-                        <div class="metrologia-item">
-                            <span>Salida por 1V In</span>
-                            <strong>275 mV / 1V</strong>
-                        </div>
+                    <div style="height: 140px;">
+                        <canvas id="graficoFFT" class="canvas-fft"></canvas>
                     </div>
                 </div>
             </div>
@@ -468,8 +474,9 @@
         let estaPausado = false;
         let bufferHistorial = [];
         const MAX_HISTORIAL = 4000;
+        let fsActual = 500;
 
-        // Control de filtros hacia Python / Microcontrolador
+        // Control de filtros hacia el backend
         function enviarFiltro() {
             lblFc.innerText = parseFloat(sliderFc.value).toFixed(1);
             socket.emit('actualizar_filtro', {
@@ -485,24 +492,24 @@
         btnMuestreo.addEventListener('click', () => {
             muestreoActivo = !muestreoActivo;
             socket.emit('control_muestreo', { activo: muestreoActivo });
-            btnMuestreo.innerText = muestreoActivo ? "Detener Muestreo" : "Iniciar Muestreo";
+            btnMuestreo.innerText = muestreoActivo ? "Detener" : "Iniciar";
             btnMuestreo.className = muestreoActivo ? "btn-detener" : "btn-iniciar";
-            txtEstado.innerText = muestreoActivo ? "● En Vivo" : "⏹ Adquisición Detenida";
-            txtEstado.style.color = muestreoActivo ? "#00e676" : "#ff3d00";
+            txtEstado.innerText = muestreoActivo ? "● En Vivo" : "⏹ Detenido";
+            txtEstado.style.color = muestreoActivo ? "var(--accent-green)" : "var(--accent-red)";
         });
 
         // Congelar y reanudar pantalla
         btnPausa.addEventListener('click', () => {
             estaPausado = !estaPausado;
-            btnPausa.innerText = estaPausado ? "Reanudar Pantalla" : "Congelar Pantalla";
+            btnPausa.innerText = estaPausado ? "Reanudar" : "Congelar";
             btnPausa.classList.toggle("pausado", estaPausado);
             sliderHistoria.disabled = !estaPausado;
             if (estaPausado) {
-                txtEstado.innerText = "⏸ Pantalla Congelada";
-                txtEstado.style.color = "#ff9100";
+                txtEstado.innerText = "⏸ Pausado";
+                txtEstado.style.color = "var(--accent-amber)";
             } else {
-                txtEstado.innerText = muestreoActivo ? "● En Vivo" : "⏹ Adquisición Detenida";
-                txtEstado.style.color = muestreoActivo ? "#00e676" : "#ff3d00";
+                txtEstado.innerText = muestreoActivo ? "● En Vivo" : "⏹ Detenido";
+                txtEstado.style.color = muestreoActivo ? "var(--accent-green)" : "var(--accent-red)";
                 dibujarOsciloscopio(bufferHistorial.length - 1);
             }
         });
@@ -514,29 +521,31 @@
 
         // Inicialización de Gráfica del Osciloscopio
         const ctxOsc = document.getElementById('graficoSenal').getContext('2d');
+        let baseTiempoMsDiv = 10;
+        let voltsDiv = 2;
         let escalaYMax = 7.0;
-        let baseTiempoMs = 100;
 
         const chartOsc = new Chart(ctxOsc, {
             type: 'line',
             data: {
-                labels: Array(100).fill(''),
                 datasets: [
                     {
-                        label: 'CH1 Entrada (Vin)',
-                        data: Array(100).fill(0),
+                        label: 'CH1 In',
+                        data: [],
                         borderColor: '#00e5ff',
                         borderWidth: 2,
-                        tension: 0,
-                        pointRadius: 0
+                        stepped: 'before',
+                        pointRadius: 2,
+                        pointBackgroundColor: '#00e5ff'
                     },
                     {
-                        label: 'CH2 Salida DAC (Vout)',
-                        data: Array(100).fill(0),
+                        label: 'CH2 DAC',
+                        data: [],
                         borderColor: '#ff9100',
                         borderWidth: 2,
-                        tension: 0,
-                        pointRadius: 0
+                        stepped: 'before',
+                        pointRadius: 2,
+                        pointBackgroundColor: '#ff9100'
                     }
                 ]
             },
@@ -545,33 +554,49 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: {
-                    y: {
-                        min: -7.0,
-                        max: 7.0,
-                        grid: { color: 'rgba(255, 255, 255, 0.08)', lineWidth: 1 },
-                        ticks: { color: '#90a4ae', font: { family: 'Courier New' }, stepSize: 2 }
-                    },
                     x: {
+                        type: 'linear',
+                        min: 0,
+                        max: baseTiempoMsDiv * 10,
                         grid: { color: 'rgba(255, 255, 255, 0.08)', lineWidth: 1 },
-                        ticks: { display: false }
+                        ticks: {
+                            stepSize: baseTiempoMsDiv,
+                            color: '#8292a6',
+                            font: { family: 'monospace', size: 10 },
+                            callback: function(v) { return v + ' ms'; }
+                        }
+                    },
+                    y: {
+                        min: -escalaYMax,
+                        max: escalaYMax,
+                        grid: { color: 'rgba(255, 255, 255, 0.08)', lineWidth: 1 },
+                        ticks: {
+                            stepSize: voltsDiv,
+                            color: '#8292a6',
+                            font: { family: 'monospace', size: 10 },
+                            callback: function(v) { return v + ' V'; }
+                        }
                     }
                 },
                 plugins: {
-                    legend: { labels: { color: '#eceff1', font: { weight: 'bold' } } }
+                    legend: { display: false }
                 }
             }
         });
 
         selEscalaY.addEventListener('change', () => {
-            escalaYMax = parseFloat(selEscalaY.value);
+            voltsDiv = parseFloat(selEscalaY.value);
+            escalaYMax = voltsDiv >= 2 ? 7.0 : (voltsDiv === 1 ? 4.0 : 2.0);
             chartOsc.options.scales.y.min = -escalaYMax;
             chartOsc.options.scales.y.max = escalaYMax;
-            chartOsc.options.scales.y.ticks.stepSize = escalaYMax > 4 ? 2 : 1;
+            chartOsc.options.scales.y.ticks.stepSize = voltsDiv;
             chartOsc.update();
         });
 
         selBaseTiempo.addEventListener('change', () => {
-            baseTiempoMs = parseInt(selBaseTiempo.value);
+            baseTiempoMsDiv = parseFloat(selBaseTiempo.value);
+            chartOsc.options.scales.x.max = baseTiempoMsDiv * 10;
+            chartOsc.options.scales.x.ticks.stepSize = baseTiempoMsDiv;
             if (!estaPausado && bufferHistorial.length > 0) {
                 dibujarOsciloscopio(bufferHistorial.length - 1);
             }
@@ -584,11 +609,12 @@
             data: {
                 labels: [],
                 datasets: [{
-                    label: 'Magnitud (Vp)',
+                    label: 'Vp',
                     data: [],
-                    backgroundColor: 'rgba(0, 229, 255, 0.6)',
+                    backgroundColor: 'rgba(0, 229, 255, 0.4)',
                     borderColor: '#00e5ff',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    borderRadius: 2
                 }]
             },
             options: {
@@ -598,12 +624,12 @@
                 scales: {
                     y: {
                         min: 0,
-                        grid: { color: 'rgba(255, 255, 255, 0.08)' },
-                        ticks: { color: '#90a4ae', font: { size: 9 } }
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#8292a6', font: { size: 9 } }
                     },
                     x: {
                         grid: { display: false },
-                        ticks: { color: '#90a4ae', font: { size: 9 }, maxTicksLimit: 8 }
+                        ticks: { color: '#8292a6', font: { size: 9 }, maxTicksLimit: 6 }
                     }
                 },
                 plugins: { legend: { display: false } }
@@ -612,6 +638,12 @@
 
         // Recepción de datos WebSocket
         socket.on('datos_dsp', function(paquete) {
+            if (paquete.fs) {
+                fsActual = paquete.fs;
+                let badge = document.getElementById('badge-fs');
+                if (badge) badge.innerText = `Fs: ${fsActual} Hz | Nyq: ${fsActual / 2} Hz`;
+            }
+
             let muestras = paquete.muestras || [];
             for (let i = 0; i < muestras.length; i++) {
                 bufferHistorial.push(muestras[i]);
@@ -634,20 +666,18 @@
         function buscarDisparo(buffer, cantidadMuestras) {
             if (buffer.length < cantidadMuestras + 10) return -1;
             
-            // Nivel medio en las últimas muestras para disparar en el centro de la oscilación
-            let nTest = Math.min(200, buffer.length);
+            let nTest = Math.min(100, buffer.length);
             let sub = buffer.slice(buffer.length - nTest);
             let vMin = Infinity, vMax = -Infinity;
             for (let i = 0; i < sub.length; i++) {
                 if (sub[i].v_in < vMin) vMin = sub[i].v_in;
                 if (sub[i].v_in > vMax) vMax = sub[i].v_in;
             }
-            if (vMax - vMin < 0.15) return -1; // Ruido o continua, no disparar
+            if (vMax - vMin < 0.15) return -1;
             let umbral = (vMax + vMin) / 2.0;
 
-            // Buscar hacia atrás el último cruce ascendente que permita mostrar la ventana completa
             let finBusqueda = buffer.length - cantidadMuestras;
-            let inicioBusqueda = Math.max(1, finBusqueda - 250);
+            let inicioBusqueda = Math.max(1, finBusqueda - 150);
 
             for (let i = finBusqueda; i >= inicioBusqueda; i--) {
                 if (buffer[i - 1].v_in <= umbral && buffer[i].v_in > umbral) {
@@ -659,16 +689,14 @@
 
         function dibujarOsciloscopio(idxFinal) {
             if (bufferHistorial.length === 0) return;
-            let cantidadMuestras = Math.min(baseTiempoMs, bufferHistorial.length);
+            let dtMs = 1000.0 / fsActual;
+            let totalMs = baseTiempoMsDiv * 10;
+            let cantidadMuestras = Math.max(2, Math.round(totalMs / dtMs));
             
             let idxInicio;
             if (!estaPausado) {
                 let idxTrig = buscarDisparo(bufferHistorial, cantidadMuestras);
-                if (idxTrig !== -1) {
-                    idxInicio = idxTrig;
-                } else {
-                    idxInicio = Math.max(0, bufferHistorial.length - cantidadMuestras);
-                }
+                idxInicio = (idxTrig !== -1) ? idxTrig : Math.max(0, bufferHistorial.length - cantidadMuestras);
             } else {
                 idxInicio = Math.max(0, idxFinal - cantidadMuestras + 1);
             }
@@ -676,13 +704,22 @@
             let ventana = bufferHistorial.slice(idxInicio, idxInicio + cantidadMuestras);
             if (ventana.length === 0) return;
 
-            chartOsc.data.labels = ventana.map((_, i) => i + ' ms');
-            chartOsc.data.datasets[0].data = ventana.map(d => d.v_in);
-            chartOsc.data.datasets[1].data = ventana.map(d => d.v_out);
+            let dataCH1 = [];
+            let dataCH2 = [];
+            for (let i = 0; i < ventana.length; i++) {
+                let t = i * dtMs;
+                dataCH1.push({ x: t, y: ventana[i].v_in });
+                dataCH2.push({ x: t, y: ventana[i].v_out });
+            }
+
+            chartOsc.options.scales.x.max = totalMs;
+            chartOsc.options.scales.x.ticks.stepSize = baseTiempoMsDiv;
+            chartOsc.data.datasets[0].data = dataCH1;
+            chartOsc.data.datasets[1].data = dataCH2;
             chartOsc.update();
 
-            // Medición estable de Vpp y Ganancia sobre una ventana amplia (últimas 500-1000 muestras)
-            let nMed = Math.min(1000, bufferHistorial.length);
+            // Medición Vpp y Ganancia
+            let nMed = Math.min(Math.round(500 / dtMs), bufferHistorial.length);
             let bloqueMedicion = bufferHistorial.slice(bufferHistorial.length - nMed);
             let vins = bloqueMedicion.map(d => d.v_in);
             let vouts = bloqueMedicion.map(d => d.v_out);
@@ -700,24 +737,33 @@
         function actualizarFFT(info) {
             let armas = info.armonicas || [];
             if (armas[0]) {
-                document.getElementById('h1-f').innerText = armas[0].frec.toFixed(1);
-                document.getElementById('h1-a').innerText = armas[0].amp.toFixed(2);
-                document.getElementById('h1-vpp').innerText = armas[0].vpp.toFixed(2);
-                document.getElementById('hud-freq').innerText = armas[0].frec.toFixed(1) + ' Hz';
+                document.getElementById('h1-f').innerText = armas[0].frec > 0.1 ? (armas[0].frec.toFixed(1) + ' Hz') : '--';
+                document.getElementById('h1-vpp').innerText = armas[0].vpp.toFixed(2) + ' V';
+                document.getElementById('hud-freq').innerText = armas[0].frec > 0.1 ? (armas[0].frec.toFixed(1) + ' Hz') : '0.0 Hz';
                 let per = armas[0].frec > 0.1 ? (1000.0 / armas[0].frec).toFixed(1) : '0.0';
                 document.getElementById('hud-periodo').innerText = per + ' ms';
             }
             if (armas[1]) {
-                document.getElementById('h2-f').innerText = armas[1].frec.toFixed(1);
-                document.getElementById('h2-a').innerText = armas[1].amp.toFixed(2);
-                document.getElementById('h2-vpp').innerText = armas[1].vpp.toFixed(2);
-                document.getElementById('h2-pct').innerText = armas[1].pct.toFixed(1) + '%';
+                if (armas[1].estado === 'fuera_nyquist') {
+                    document.getElementById('h2-f').innerText = '> 250 Hz';
+                    document.getElementById('h2-vpp').innerText = '--';
+                    document.getElementById('h2-pct').innerText = '--';
+                } else {
+                    document.getElementById('h2-f').innerText = armas[1].frec > 0.1 ? (armas[1].frec.toFixed(1) + ' Hz') : '--';
+                    document.getElementById('h2-vpp').innerText = armas[1].vpp.toFixed(2) + ' V';
+                    document.getElementById('h2-pct').innerText = armas[1].pct.toFixed(1) + '%';
+                }
             }
             if (armas[2]) {
-                document.getElementById('h3-f').innerText = armas[2].frec.toFixed(1);
-                document.getElementById('h3-a').innerText = armas[2].amp.toFixed(2);
-                document.getElementById('h3-vpp').innerText = armas[2].vpp.toFixed(2);
-                document.getElementById('h3-pct').innerText = armas[2].pct.toFixed(1) + '%';
+                if (armas[2].estado === 'fuera_nyquist') {
+                    document.getElementById('h3-f').innerText = '> 250 Hz';
+                    document.getElementById('h3-vpp').innerText = '--';
+                    document.getElementById('h3-pct').innerText = '--';
+                } else {
+                    document.getElementById('h3-f').innerText = armas[2].frec > 0.1 ? (armas[2].frec.toFixed(1) + ' Hz') : '--';
+                    document.getElementById('h3-vpp').innerText = armas[2].vpp.toFixed(2) + ' V';
+                    document.getElementById('h3-pct').innerText = armas[2].pct.toFixed(1) + '%';
+                }
             }
 
             document.getElementById('txtThd').innerText = 'THD: ' + info.thd.toFixed(1) + '%';

@@ -29,8 +29,8 @@ inline int voltajeADac(float v) {
   return dac;
 }
 
-// Muestreo
-const float DT_FILTRO = 0.001f; // 1 ms = 1000 Hz
+// Muestreo optimizado a 500 Hz (2 ms por muestra)
+const float DT_FILTRO = 0.002f; // 2 ms = 500 Hz
 
 // Estado de Filtros
 volatile int tipo_filtro = 0; // 0=sin filtro, 1=pasabajas, 2=pasaaltos, 3=pasabanda
@@ -54,7 +54,7 @@ float w_bp_prev = 0.0f;
 void recalcularCoeficientes() {
   float fc = fc_filtro;
   if (fc < 0.5f) fc = 0.5f;
-  if (fc > 400.0f) fc = 400.0f;
+  if (fc > 200.0f) fc = 200.0f; // Nyquist a 500 Hz es 250 Hz
   
   // Pasabajas IIR: y[n] = alfa*x[n] + (1-alfa)*y[n-1]
   float rc_lp = 1.0f / (2.0f * 3.14159265f * fc);
@@ -67,7 +67,7 @@ void recalcularCoeficientes() {
   // Pasabanda: cascada LPF (fc_alta) y HPF (fc_baja)
   float bw = (fc * 0.3f < 4.0f) ? 4.0f : (fc * 0.3f);
   float fc_alta = fc + (bw / 2.0f);
-  if (fc_alta > 450.0f) fc_alta = 450.0f;
+  if (fc_alta > 220.0f) fc_alta = 220.0f;
   float rc_bp_lp = 1.0f / (2.0f * 3.14159265f * fc_alta);
   alfa_bp_lp = DT_FILTRO / (rc_bp_lp + DT_FILTRO);
   
@@ -108,48 +108,6 @@ inline float aplicarFiltro(float x_act) {
   return salida;
 }
 
-// Almacena hasta 1024 pares (vin_mv, vout_mv) como int16_t
-const int RING_BUFFER_SIZE = 1024;
-int16_t ring_vin[RING_BUFFER_SIZE];
-int16_t ring_vout[RING_BUFFER_SIZE];
-volatile uint32_t ring_head = 0;
-volatile uint32_t ring_tail = 0; // Escrito por Sampler Thread
-
-inline void ring_push(int16_t vin_mv, int16_t vout_mv) {
-  uint32_t next_tail = (ring_tail + 1) & (RING_BUFFER_SIZE - 1);
-  if (next_tail == ring_head) {
-    // Si el buffer se llena por algún retraso en la lectura, avanzar ring_head
-    // para conservar siempre las muestras más recientes y evitar congelamientos.
-    ring_head = (ring_head + 1) & (RING_BUFFER_SIZE - 1);
-  }
-  ring_vin[ring_tail] = vin_mv;
-  ring_vout[ring_tail] = vout_mv;
-  ring_tail = next_tail;
-}
-
-// Retorna hasta 96 muestras (192 int16 = ~400-600 bytes en Msgpack, seguro dentro de 1024 DECODER_BUFFER_SIZE)
-const int MAX_RPC_SAMPLES = 96;
-
-std::vector<int16_t> leerTelemetria() {
-  std::vector<int16_t> datos;
-  uint32_t head = ring_head;
-  uint32_t tail = ring_tail;
-  
-  uint32_t disponibles = (tail >= head) ? (tail - head) : (RING_BUFFER_SIZE - head + tail);
-  uint32_t a_leer = (disponibles > MAX_RPC_SAMPLES) ? MAX_RPC_SAMPLES : disponibles;
-  
-  if (a_leer > 0) {
-    datos.reserve(a_leer * 2);
-    for (uint32_t i = 0; i < a_leer; i++) {
-      datos.push_back(ring_vin[head]);
-      datos.push_back(ring_vout[head]);
-      head = (head + 1) & (RING_BUFFER_SIZE - 1);
-    }
-    ring_head = head;
-  }
-  return datos;
-}
-
 int configurarFiltro(int tipo, double fc) {
   tipo_filtro = tipo;
   fc_filtro = (float)fc;
@@ -172,7 +130,7 @@ int escribirDAC(int valor) {
   return 1;
 }
 
-// HILO DE MUESTREO EN TIEMPO REAL (ZEPHYR RTOS)
+// HILO DE MUESTREO EN TIEMPO REAL DIRECTO (ZEPHYR RTOS - SIN BUFFER)
 #define SAMPLER_STACK_SIZE 2048
 #define SAMPLER_PRIO 1 // Mayor prioridad que Bridge (prio 5)
 
@@ -180,13 +138,17 @@ K_THREAD_STACK_DEFINE(sampler_stack_area, SAMPLER_STACK_SIZE);
 struct k_thread sampler_thread;
 
 void sampler_thread_entry(void *, void *, void *) {
+  while (!Bridge.is_started()) {
+    k_msleep(10);
+  }
+  
   int64_t next_tick = k_uptime_get();
   
   while (1) {
-    next_tick += 1; // 1 ms exacto (1000 Hz)
+    next_tick += 2; // 2 ms exactos (500 Hz)
     int64_t now = k_uptime_get();
     if (next_tick <= now) {
-      next_tick = now + 1;
+      next_tick = now + 2;
     }
     k_sleep(K_TIMEOUT_ABS_MS(next_tick));
     
@@ -198,9 +160,10 @@ void sampler_thread_entry(void *, void *, void *) {
     int dac = voltajeADac(vout);
     analogWrite(PIN_DAC, dac);
     
+    // Envío directo muestra a muestra hacia Linux (cero retención en el MCU)
     int16_t vin_mv = (int16_t)(vin * 1000.0f);
     int16_t vout_mv = (int16_t)(vout * 1000.0f);
-    ring_push(vin_mv, vout_mv);
+    Bridge.notify("m", (int)vin_mv, (int)vout_mv);
   }
 }
 
@@ -210,19 +173,18 @@ void setup() {
   
   recalcularCoeficientes();
   
-  // Iniciar hilo de muestreo en tiempo real
-  k_thread_create(&sampler_thread, sampler_stack_area,
-                  K_THREAD_STACK_SIZEOF(sampler_stack_area),
-                  sampler_thread_entry, NULL, NULL, NULL,
-                  SAMPLER_PRIO, 0, K_NO_WAIT);
-  k_thread_name_set(&sampler_thread, "dsp_sampler");
-  
   Bridge.begin();
   Bridge.provide("leerA4", leerSenal);
   Bridge.provide("escribirDAC", escribirDAC);
   Bridge.provide("configurarFiltro", configurarFiltro);
   Bridge.provide("controlMuestreo", controlMuestreo);
-  Bridge.provide("leerTelemetria", leerTelemetria);
+
+  // Iniciar hilo de muestreo en tiempo real una vez que el Bridge esté activo
+  k_thread_create(&sampler_thread, sampler_stack_area,
+                  K_THREAD_STACK_SIZEOF(sampler_stack_area),
+                  sampler_thread_entry, NULL, NULL, NULL,
+                  SAMPLER_PRIO, 0, K_NO_WAIT);
+  k_thread_name_set(&sampler_thread, "dsp_sampler");
 }
 
 void loop() {

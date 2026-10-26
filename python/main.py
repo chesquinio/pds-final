@@ -1,72 +1,31 @@
 import threading
 import time
-import socket
-import msgpack
 import numpy as np
 from datetime import datetime
 from collections import deque
-from arduino.app_utils import App
+from arduino.app_utils import App, Bridge
 from arduino.app_bricks.web_ui import WebUI
 
-class BridgeSocketClient:
-    def __init__(self, socket_path):
-        self.socket_path = socket_path
-        self.msgid = 0
-        self._lock = threading.Lock()
-        self._sock = None
-
-    def _conectar(self):
-        try:
-            if self._sock:
-                try:
-                    self._sock.close()
-                except Exception:
-                    pass
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(0.3)
-            s.connect(self.socket_path)
-            self._sock = s
-            return self._sock
-        except Exception as e:
-            self._sock = None
-            return None
-
-    def call(self, method, *args):
-        with self._lock:
-            self.msgid = (self.msgid + 1) & 0xFFFFFFFF
-            current_id = self.msgid
-            req = [0, current_id, method, list(args)]
-            payload = msgpack.packb(req, use_bin_type=True)
-            
-            for intento in range(2):
-                if not self._sock:
-                    if not self._conectar():
-                        time.sleep(0.01)
-                        continue
-                try:
-                    self._sock.sendall(payload)
-                    unpacker = msgpack.Unpacker(raw=False)
-                    while True:
-                        data = self._sock.recv(4096)
-                        if not data:
-                            raise ConnectionResetError("Socket cerrado por el bridge")
-                        unpacker.feed(data)
-                        for msg in unpacker:
-                            if len(msg) == 4 and msg[0] == 1 and msg[1] == current_id:
-                                return msg[3]
-                except Exception as e:
-                    self._conectar()
-            return None
-
-rpc = BridgeSocketClient("/var/run/arduino-router.sock")
 web_ui = WebUI()
 
 # --- PAR�METROS DSP Y DE MUESTREO NATIVO A 1000 HZ ---
-FS = 1000.0  # Frecuencia de muestreo del hardware (Hz)
+FS = 500.0  # Frecuencia de muestreo optimizada (Hz)
 DT = 1.0 / FS
-TAMANO_FFT = 1024
+TAMANO_FFT = 512
 
 buffer_fft = deque(maxlen=TAMANO_FFT)
+
+muestras_batch = []
+batch_lock = threading.Lock()
+
+def recibir_muestra(vin_mv: int, vout_mv: int):
+    v_in = float(vin_mv) / 1000.0
+    v_out = float(vout_mv) / 1000.0
+    buffer_fft.append(v_in)
+    with batch_lock:
+        muestras_batch.append({'v_in': round(v_in, 3), 'v_out': round(v_out, 3)})
+
+Bridge.provide("m", recibir_muestra)
 
 config_filtro = {'tipo': 'ninguno', 'fc': 20.0}
 nueva_configuracion = None
@@ -119,9 +78,9 @@ def procesar_fft(datos):
     magnitudes = np.abs(espectro) * (2.0 / ganancia_coherente)
     df = FS / TAMANO_FFT
     
-    # Busqueda de Fundamental entre 1.0 Hz y 125.0 Hz
+    # Busqueda de Fundamental entre 1.0 Hz y 248.0 Hz (dentro de Nyquist = 250 Hz)
     idx_min = max(1, int(1.0 / df))
-    idx_max = min(len(magnitudes) - 2, int(125.0 / df))
+    idx_max = min(len(magnitudes) - 2, int(248.0 / df))
     
     if idx_max <= idx_min:
         return None
@@ -170,30 +129,31 @@ def procesar_fft(datos):
         f_teorica = mult * f1
         k_teorico = int(round(f_teorica / df))
         
-        # Debe encontrarse por debajo del limite de Nyquist (FS/2 = 500 Hz)
-        if k_teorico + 2 < len(magnitudes):
-            # Proteger contra invasion del lobulo principal de la fundamental o armonica previa
-            k_ini = max(k_teorico_prev + 3, k_teorico - 2)
-            k_fin = min(len(magnitudes) - 2, k_teorico + 3)
+        # Debe encontrarse por debajo del limite de Nyquist (FS/2 = 250 Hz)
+        if k_teorico + 1 < len(magnitudes):
+            # Proteger contra invasion del lobulo principal de la armonica previa
+            k_ini = max(k_teorico_prev + 2, k_teorico - 2)
+            k_fin = min(len(magnitudes) - 2, k_teorico + 2)
             k_teorico_prev = k_teorico
             
             if k_fin >= k_ini:
                 k_h = k_ini + int(np.argmax(magnitudes[k_ini:k_fin + 1]))
                 
-                # Umbral de armonica: por encima de lobulos laterales de Hanning (-31.5 dB = ~2.7%)
-                umbral_armonica = max(0.06, 0.035 * a1)
-                if (magnitudes[k_h] > magnitudes[k_h - 1] and 
-                    magnitudes[k_h] > magnitudes[k_h + 1] and 
-                    magnitudes[k_h] >= umbral_armonica):
-                    
-                    yh1, yh2, yh3 = float(magnitudes[k_h - 1]), float(magnitudes[k_h]), float(magnitudes[k_h + 1])
-                    denom_h = yh1 - 2.0 * yh2 + yh3
-                    delta_h = 0.5 * (yh1 - yh3) / denom_h if abs(denom_h) > 1e-9 else 0.0
-                    fh = (k_h + delta_h) * df
-                    
-                    val_sinc_h = sinc(delta_h) / (1.0 - delta_h**2) if abs(delta_h) < 0.999 else 1.0
-                    corr_h = 1.0 / abs(val_sinc_h) if abs(val_sinc_h) > 1e-4 else 1.0
-                    ah = yh2 * corr_h
+                # Umbral de armonica: por encima del piso de ruido (~30 mV o 2.5% de la fundamental)
+                umbral_armonica = max(0.03, 0.025 * a1)
+                if magnitudes[k_h] >= umbral_armonica:
+                    # Ajuste fino si es pico local
+                    if magnitudes[k_h] >= magnitudes[k_h - 1] and magnitudes[k_h] >= magnitudes[k_h + 1]:
+                        yh1, yh2, yh3 = float(magnitudes[k_h - 1]), float(magnitudes[k_h]), float(magnitudes[k_h + 1])
+                        denom_h = yh1 - 2.0 * yh2 + yh3
+                        delta_h = 0.5 * (yh1 - yh3) / denom_h if abs(denom_h) > 1e-9 else 0.0
+                        fh = (k_h + delta_h) * df
+                        val_sinc_h = sinc(delta_h) / (1.0 - delta_h**2) if abs(delta_h) < 0.999 else 1.0
+                        corr_h = 1.0 / abs(val_sinc_h) if abs(val_sinc_h) > 1e-4 else 1.0
+                        ah = yh2 * corr_h
+                    else:
+                        fh = f_teorica
+                        ah = float(magnitudes[k_h])
                     
                     resultado.append({
                         'armonica': mult,
@@ -201,7 +161,8 @@ def procesar_fft(datos):
                         'frec': round(float(fh), 1),
                         'amp': round(float(ah), 2),
                         'vpp': round(float(ah * 2.0), 2),
-                        'pct': round(float((ah / a1) * 100.0), 1)
+                        'pct': round(float((ah / a1) * 100.0), 1),
+                        'estado': 'ok'
                     })
                 else:
                     resultado.append({
@@ -210,7 +171,8 @@ def procesar_fft(datos):
                         'frec': round(float(f_teorica), 1),
                         'amp': 0.0,
                         'vpp': 0.0,
-                        'pct': 0.0
+                        'pct': 0.0,
+                        'estado': 'no_detectada'
                     })
             else:
                 resultado.append({
@@ -219,7 +181,8 @@ def procesar_fft(datos):
                     'frec': round(float(f_teorica), 1),
                     'amp': 0.0,
                     'vpp': 0.0,
-                    'pct': 0.0
+                    'pct': 0.0,
+                    'estado': 'no_detectada'
                 })
         else:
             resultado.append({
@@ -228,16 +191,17 @@ def procesar_fft(datos):
                 'frec': round(float(f_teorica), 1),
                 'amp': 0.0,
                 'vpp': 0.0,
-                'pct': 0.0
+                'pct': 0.0,
+                'estado': 'fuera_nyquist'
             })
             
     a2 = resultado[1]['amp']
     a3 = resultado[2]['amp']
     thd = (np.sqrt(a2**2 + a3**2) / a1) * 100.0 if a1 > 0.05 else 0.0
     
-    # Mini-espectro para graficar en pantalla (hasta 300 Hz en 100 puntos nítidos)
-    max_k_esp = min(len(magnitudes), int(300.0 / df))
-    paso_esp = max(1, max_k_esp // 100)
+    # Mini-espectro para graficar en pantalla (hasta 250 Hz en ~80 puntos nítidos)
+    max_k_esp = min(len(magnitudes), int(250.0 / df))
+    paso_esp = max(1, max_k_esp // 80)
     mini_espectro = []
     for bi in range(0, max_k_esp, paso_esp):
         mini_espectro.append({
@@ -265,7 +229,7 @@ def bucle_control_senal():
             cfg = nueva_configuracion
             nueva_configuracion = None
             try:
-                rpc.call('configurarFiltro', cfg['tipo'], float(cfg['fc']))
+                Bridge.call('configurarFiltro', cfg['tipo'], float(cfg['fc']))
             except Exception as e:
                 print(f"Error al enviar configurarFiltro: {e}")
                 
@@ -274,45 +238,29 @@ def bucle_control_senal():
             cmd = comando_muestreo
             comando_muestreo = None
             try:
-                rpc.call('controlMuestreo', cmd)
+                Bridge.call('controlMuestreo', cmd)
             except Exception as e:
                 print(f"Error al enviar controlMuestreo: {e}")
 
-        # 3. Leer lote de muestras recopiladas en el MCU a 1000 Hz
-        # Drenado completo del ring buffer para garantizar cero perdida de muestras
-        datos_mcu = []
-        for _ in range(16):
-            lote = rpc.call('leerTelemetria')
-            if not lote:
-                break
-            datos_mcu.extend(lote)
-            if len(lote) < 96 * 2: # Se vació el buffer del MCU
-                break
+        # 3. Extraer muestras recién llegadas directamente por streaming asíncrono
+        with batch_lock:
+            if muestras_batch:
+                lote = list(muestras_batch)
+                muestras_batch.clear()
+            else:
+                lote = []
         
-        if datos_mcu and len(datos_mcu) >= 2:
-            muestras_batch = []
-            tiempo_base = datetime.now()
-            
-            for i in range(0, len(datos_mcu), 2):
-                v_in = float(datos_mcu[i]) / 1000.0
-                v_out = float(datos_mcu[i + 1]) / 1000.0
-                
-                buffer_fft.append(v_in)
-                muestras_batch.append({
-                    'v_in': round(v_in, 3),
-                    'v_out': round(v_out, 3),
-                    'tiempo': tiempo_base.strftime('%H:%M:%S.%f')[:-3]
-                })
-            
-            # Calculo de la FFT aproximadamente cada 200 ms (5 ciclos a ~25 FPS)
+        if lote:
+            # Calculo de la FFT en ventana deslizante cada ~100 ms (5 ciclos a ~50 FPS)
             contador_fft += 1
             info_fft = None
             if contador_fft >= 5:
                 contador_fft = 0
-                info_fft = procesar_fft(list(buffer_fft))
+                if len(buffer_fft) >= TAMANO_FFT:
+                    info_fft = procesar_fft(list(buffer_fft))
             
             paquete = {
-                'muestras': muestras_batch,
+                'muestras': lote,
                 'muestreo_activo': muestreo_activo,
                 'fs': FS
             }
@@ -324,7 +272,7 @@ def bucle_control_senal():
     except Exception as e:
         print(f"Error en bucle_control_senal: {e}")
         
-    time.sleep(0.04) # ~25 cuadros por segundo hacia la UI web
+    time.sleep(0.02) # ~50 cuadros por segundo para streaming continuo y fluido
 
 if __name__ == '__main__':
     App.run(user_loop=bucle_control_senal)
